@@ -8,23 +8,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### In Progress
-- Phase 4: Proxy server implementation
+- Phase 5: Worker implementation with retry logic
 
 ### Planned
 - Main server with certificate authority
-- Worker implementation with retry logic
 - Web portal (user and admin interfaces)
-- Prometheus + Grafana monitoring
+- Complete Prometheus + Grafana monitoring setup
 
 ### Completed
 - Phase 0: Project setup and repository structure
 - Phase 1: Design document with architecture and specifications
 - Phase 2: API & Database specifications
 - Phase 3: Certificate management and authentication workflow
+- Phase 4: Proxy server implementation
 
 ## [1.0.0] - TBD
 
 ### Added
+
+#### Phase 4 (October 2025)
+- **Proxy Server Application**:
+  - `proxy/app.py` - Complete FastAPI proxy server (650+ lines)
+  - POST /api/v1/messages - Message submission with mutual TLS
+  - GET /api/v1/health - Health check with component status
+  - GET /metrics - Prometheus metrics endpoint
+  - Automatic Swagger/ReDoc documentation
+- **Authentication & Validation**:
+  - Mutual TLS certificate extraction and validation
+  - Client certificate CN to client_id mapping
+  - E.164 phone number validation
+  - Message body length validation (1-1000 chars)
+  - Certificate revocation checking (CRL support ready)
+- **Redis Queue Integration**:
+  - Persistent message queuing with connection pooling
+  - Automatic reconnection with health checking
+  - Queue size monitoring and metrics
+  - LPUSH/BRPOP atomic operations
+- **Main Server Integration**:
+  - Async HTTP client with mutual TLS
+  - Message registration API calls
+  - Retry logic and error handling
+  - Best-effort delivery with fallback
+- **Logging System**:
+  - TimedRotatingFileHandler with daily rotation
+  - 7-day log retention
+  - Configurable log levels (DEBUG, INFO, WARNING, ERROR)
+  - Structured logging with file/line numbers
+  - Console and file output
+- **Prometheus Metrics**:
+  - Request counters by method/endpoint/status
+  - Request duration histograms
+  - Queue size gauge
+  - Messages enqueued/failed counters
+  - Certificate validation metrics
+- **Testing & Development Tools**:
+  - `test_client.py` - Comprehensive test client (400+ lines)
+  - Full test suite with 6 test scenarios
+  - Health check testing
+  - TLS and non-TLS modes
+  - Detailed error reporting
+- **Startup Scripts**:
+  - `start_proxy.bat` - Windows batch script
+  - `start_proxy.ps1` - PowerShell script with parameters
+  - Development and production modes
+  - Automatic dependency installation
+  - Certificate validation
+- **Service Files**:
+  - `proxy.service` - Systemd service for Linux
+  - Windows service configuration guidance
+  - Security hardening settings
+  - Resource limits and restart policies
+- **Documentation**:
+  - `proxy/README.md` - Complete proxy documentation (350+ lines)
+  - API endpoint documentation
+  - Configuration guide
+  - Troubleshooting section
+  - Performance tuning tips
+  - Production deployment guide
 
 #### Phase 3 (October 2025)
 - **Certificate Management Scripts (Windows Batch)**:
