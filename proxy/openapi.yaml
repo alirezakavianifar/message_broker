@@ -1,0 +1,410 @@
+openapi: 3.0.3
+info:
+  title: Message Broker Proxy API
+  description: |
+    Proxy server API for message ingestion with mutual TLS authentication.
+    
+    ## Authentication
+    All endpoints (except /health) require mutual TLS authentication with a valid client certificate
+    issued by the Message Broker CA.
+    
+    ## Rate Limiting
+    API is rate limited to 100 requests per 60 seconds per client.
+    
+  version: 1.0.0
+  contact:
+    name: Message Broker Team
+    email: support@messagebroker.example.com
+  license:
+    name: Proprietary
+    
+servers:
+  - url: https://proxy.example.com:8001/api/v1
+    description: Production Proxy Server
+  - url: https://localhost:8001/api/v1
+    description: Local Development Server
+
+tags:
+  - name: Messages
+    description: Message submission endpoints
+  - name: Health
+    description: Health check and monitoring endpoints
+  - name: Metrics
+    description: Prometheus metrics endpoints
+
+paths:
+  /messages:
+    post:
+      summary: Submit a message
+      description: |
+        Submit a message for processing. Requires mutual TLS authentication.
+        
+        The message will be validated, enqueued to Redis, and registered in the database.
+        Returns immediately after successful enqueue (async processing).
+        
+        ## Validation Rules
+        - `sender_number`: Must be in E.164 format (e.g., +1234567890)
+        - `message_body`: Maximum 1000 characters, cannot be empty
+        - Client certificate must be valid and not revoked
+        
+      operationId: submitMessage
+      tags:
+        - Messages
+      security:
+        - mutualTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageSubmission'
+            examples:
+              valid_message:
+                summary: Valid message submission
+                value:
+                  sender_number: "+1234567890"
+                  message_body: "This is a test message"
+                  metadata:
+                    timestamp: "2025-10-20T12:34:56.789Z"
+              
+      responses:
+        '202':
+          description: Message accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageAcceptedResponse'
+              example:
+                message_id: "550e8400-e29b-41d4-a716-446655440000"
+                status: "queued"
+                client_id: "client_001"
+                queued_at: "2025-10-20T12:34:56.789Z"
+                
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_phone:
+                  summary: Invalid phone number format
+                  value:
+                    error: "validation_error"
+                    message: "Invalid sender_number format. Must be E.164 format."
+                    details:
+                      field: "sender_number"
+                      value: "1234567890"
+                message_too_long:
+                  summary: Message body too long
+                  value:
+                    error: "validation_error"
+                    message: "message_body exceeds maximum length of 1000 characters"
+                    details:
+                      field: "message_body"
+                      length: 1234
+                      
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "authentication_error"
+                message: "Invalid or missing client certificate"
+                
+        '403':
+          description: Certificate revoked or unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "authorization_error"
+                message: "Client certificate has been revoked"
+                
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "rate_limit_exceeded"
+                message: "Rate limit of 100 requests per 60 seconds exceeded"
+                retry_after: 45
+                
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "internal_error"
+                message: "Failed to process message"
+                
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "service_unavailable"
+                message: "Redis queue unavailable"
+
+  /health:
+    get:
+      summary: Health check
+      description: |
+        Returns the health status of the proxy server.
+        
+        Checks:
+        - Redis connection
+        - Main server connectivity
+        - Certificate validity
+        
+        This endpoint does not require authentication.
+        
+      operationId: healthCheck
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "healthy"
+                version: "1.0.0"
+                timestamp: "2025-10-20T12:34:56.789Z"
+                checks:
+                  redis: "healthy"
+                  main_server: "healthy"
+                  certificate: "valid"
+                uptime_seconds: 86400
+                
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "unhealthy"
+                version: "1.0.0"
+                timestamp: "2025-10-20T12:34:56.789Z"
+                checks:
+                  redis: "unhealthy"
+                  main_server: "healthy"
+                  certificate: "valid"
+                errors:
+                  - "Redis connection timeout"
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: |
+        Returns Prometheus-formatted metrics for monitoring.
+        
+        Metrics include:
+        - Request count and latency
+        - Queue size
+        - Error rates
+        - Certificate validation stats
+        
+      operationId: getMetrics
+      tags:
+        - Metrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP proxy_requests_total Total number of requests
+                # TYPE proxy_requests_total counter
+                proxy_requests_total{method="POST",endpoint="/api/v1/messages",status="202"} 1234
+                
+                # HELP proxy_request_duration_seconds Request duration in seconds
+                # TYPE proxy_request_duration_seconds histogram
+                proxy_request_duration_seconds_bucket{le="0.1"} 1000
+                proxy_request_duration_seconds_bucket{le="0.5"} 1200
+                proxy_request_duration_seconds_bucket{le="1.0"} 1230
+                
+                # HELP redis_queue_size Current queue size
+                # TYPE redis_queue_size gauge
+                redis_queue_size 42
+
+components:
+  securitySchemes:
+    mutualTLS:
+      type: mutualTLS
+      description: Client certificate authentication via mutual TLS
+
+  schemas:
+    MessageSubmission:
+      type: object
+      required:
+        - sender_number
+        - message_body
+      properties:
+        sender_number:
+          type: string
+          pattern: '^\+[1-9]\d{1,14}$'
+          description: Phone number in E.164 format (e.g., +1234567890)
+          example: "+1234567890"
+          minLength: 8
+          maxLength: 16
+        message_body:
+          type: string
+          description: Message content
+          example: "This is a test message"
+          minLength: 1
+          maxLength: 1000
+        metadata:
+          type: object
+          description: Optional metadata (auto-populated if not provided)
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+              description: Message submission timestamp (ISO 8601)
+              example: "2025-10-20T12:34:56.789Z"
+            client_id:
+              type: string
+              description: Client identifier (extracted from certificate)
+              example: "client_001"
+              readOnly: true
+            domain:
+              type: string
+              description: Domain (extracted from certificate or host)
+              example: "example.com"
+              readOnly: true
+              
+    MessageAcceptedResponse:
+      type: object
+      required:
+        - message_id
+        - status
+        - client_id
+        - queued_at
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          description: Unique message identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        status:
+          type: string
+          enum: [queued]
+          description: Message status
+          example: "queued"
+        client_id:
+          type: string
+          description: Client identifier
+          example: "client_001"
+        queued_at:
+          type: string
+          format: date-time
+          description: Queue timestamp
+          example: "2025-10-20T12:34:56.789Z"
+        position:
+          type: integer
+          description: Position in queue (optional)
+          example: 5
+          
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+          description: Overall health status
+          example: "healthy"
+        version:
+          type: string
+          description: Service version
+          example: "1.0.0"
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+          example: "2025-10-20T12:34:56.789Z"
+        checks:
+          type: object
+          description: Individual component health checks
+          properties:
+            redis:
+              type: string
+              enum: [healthy, unhealthy]
+              example: "healthy"
+            main_server:
+              type: string
+              enum: [healthy, unhealthy]
+              example: "healthy"
+            certificate:
+              type: string
+              enum: [valid, expiring, expired]
+              example: "valid"
+        uptime_seconds:
+          type: integer
+          description: Service uptime in seconds
+          example: 86400
+        errors:
+          type: array
+          description: List of errors (if unhealthy)
+          items:
+            type: string
+          example:
+            - "Redis connection timeout"
+            
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: "validation_error"
+          enum:
+            - validation_error
+            - authentication_error
+            - authorization_error
+            - rate_limit_exceeded
+            - internal_error
+            - service_unavailable
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid sender_number format"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+          example: "2025-10-20T12:34:56.789Z"
+        request_id:
+          type: string
+          description: Request identifier for tracking
+          example: "req_abc123"
+        retry_after:
+          type: integer
+          description: Seconds to wait before retrying (for rate limits)
+          example: 45
+

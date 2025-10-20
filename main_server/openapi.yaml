@@ -1,0 +1,1034 @@
+openapi: 3.0.3
+info:
+  title: Message Broker Main Server API
+  description: |
+    Main server API for message persistence, certificate management, and portal access.
+    
+    ## Authentication
+    
+    ### Internal API (Mutual TLS)
+    Internal endpoints (`/internal/*`) require mutual TLS authentication with certificates
+    issued by the Message Broker CA. Used by proxy and workers.
+    
+    ### Admin API (Mutual TLS)
+    Admin endpoints (`/admin/*`) require mutual TLS with admin-level certificates.
+    
+    ### Portal API (JWT)
+    Portal endpoints (`/portal/*`) require JWT authentication obtained via login.
+    
+  version: 1.0.0
+  contact:
+    name: Message Broker Team
+    email: support@messagebroker.example.com
+
+servers:
+  - url: https://main.example.com:8000
+    description: Production Main Server
+  - url: https://localhost:8000
+    description: Local Development Server
+
+tags:
+  - name: Internal
+    description: Internal API for proxy and workers (Mutual TLS)
+  - name: Admin
+    description: Admin API for certificate and system management (Mutual TLS)
+  - name: Portal
+    description: Portal API for web interface (JWT)
+  - name: Auth
+    description: Authentication endpoints
+  - name: Health
+    description: Health check and monitoring
+
+paths:
+  # ==================== Internal API ====================
+  
+  /internal/messages/register:
+    post:
+      summary: Register a new message
+      description: |
+        Called by proxy to register a message in the database after enqueueing.
+        
+        This endpoint:
+        - Encrypts the message body with AES-256
+        - Hashes the sender number with SHA-256
+        - Stores message in MySQL with status='queued'
+        - Returns message_id for tracking
+        
+      operationId: registerMessage
+      tags:
+        - Internal
+      security:
+        - mutualTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageRegistration'
+      responses:
+        '201':
+          description: Message registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageRegisteredResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /internal/messages/deliver:
+    post:
+      summary: Mark message as delivered
+      description: |
+        Called by workers after successful message delivery.
+        
+        Updates message status to 'delivered' and sets delivered_at timestamp.
+        
+      operationId: deliverMessage
+      tags:
+        - Internal
+      security:
+        - mutualTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageDelivery'
+      responses:
+        '200':
+          description: Message marked as delivered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageDeliveryResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /internal/messages/{message_id}/status:
+    put:
+      summary: Update message status
+      description: |
+        Update message status and attempt count. Used by workers for retries.
+        
+      operationId: updateMessageStatus
+      tags:
+        - Internal
+      security:
+        - mutualTLS: []
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Message UUID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageStatusUpdate'
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageStatusResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ==================== Admin API ====================
+  
+  /admin/certificates/generate:
+    post:
+      summary: Generate new client certificate
+      description: |
+        Generate a new client certificate signed by the CA.
+        
+        Returns certificate, private key, and fingerprint.
+        
+        **Warning**: Private key is only returned once. Store securely.
+        
+      operationId: generateCertificate
+      tags:
+        - Admin
+      security:
+        - mutualTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateGenerationRequest'
+      responses:
+        '201':
+          description: Certificate generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateGenerationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Certificate already exists for this client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/certificates/revoke:
+    post:
+      summary: Revoke a client certificate
+      description: |
+        Revoke a client certificate by adding it to the CRL.
+        
+        The certificate will be rejected on all future requests.
+        
+      operationId: revokeCertificate
+      tags:
+        - Admin
+      security:
+        - mutualTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateRevocationRequest'
+      responses:
+        '200':
+          description: Certificate revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateRevocationResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/certificates:
+    get:
+      summary: List all certificates
+      description: List all client certificates with their status
+      operationId: listCertificates
+      tags:
+        - Admin
+      security:
+        - mutualTLS: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, revoked, expired, all]
+            default: active
+        - name: domain
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: List of certificates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/users:
+    get:
+      summary: List portal users
+      operationId: listUsers
+      tags:
+        - Admin
+      security:
+        - mutualTLS: []
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [user, admin, all]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create portal user
+      operationId: createUser
+      tags:
+        - Admin
+      security:
+        - mutualTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreationRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{user_id}:
+    delete:
+      summary: Delete portal user
+      operationId: deleteUser
+      tags:
+        - Admin
+      security:
+        - mutualTLS: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: User deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/stats:
+    get:
+      summary: Get system statistics
+      operationId: getSystemStats
+      tags:
+        - Admin
+      security:
+        - mutualTLS: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [hour, day, week, month]
+            default: day
+      responses:
+        '200':
+          description: System statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatsResponse'
+
+  # ==================== Portal API ====================
+  
+  /portal/auth/login:
+    post:
+      summary: Portal login
+      description: |
+        Authenticate user and receive JWT token.
+        
+        Token is valid for 30 minutes and should be sent in Authorization header
+        for subsequent requests.
+        
+      operationId: portalLogin
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /portal/auth/refresh:
+    post:
+      summary: Refresh JWT token
+      operationId: refreshToken
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /portal/messages:
+    get:
+      summary: Get messages for current user
+      description: |
+        Retrieve messages for the authenticated user.
+        
+        Users can only see their own messages. Admins can see all messages.
+        
+      operationId: getMessages
+      tags:
+        - Portal
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [queued, delivered, failed, all]
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: search
+          in: query
+          description: Search in sender_number (hashed comparison)
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /portal/messages/{message_id}:
+    get:
+      summary: Get message details
+      description: |
+        Get detailed information about a specific message.
+        
+        Message body is decrypted server-side if user is authorized.
+        
+      operationId: getMessageDetails
+      tags:
+        - Portal
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Message details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          description: Not authorized to view this message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /portal/profile:
+    get:
+      summary: Get user profile
+      operationId: getUserProfile
+      tags:
+        - Portal
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==================== Health ====================
+  
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      operationId: getMetrics
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    mutualTLS:
+      type: mutualTLS
+      description: Client certificate authentication
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication required or failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # ==================== Message Schemas ====================
+    
+    MessageRegistration:
+      type: object
+      required:
+        - sender_number
+        - message_body
+        - client_id
+      properties:
+        sender_number:
+          type: string
+          pattern: '^\+[1-9]\d{1,14}$'
+          example: "+1234567890"
+        message_body:
+          type: string
+          maxLength: 1000
+          example: "Test message"
+        client_id:
+          type: string
+          example: "client_001"
+        domain:
+          type: string
+          example: "example.com"
+        metadata:
+          type: object
+          additionalProperties: true
+
+    MessageRegisteredResponse:
+      type: object
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued]
+        created_at:
+          type: string
+          format: date-time
+
+    MessageDelivery:
+      type: object
+      required:
+        - message_id
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        worker_id:
+          type: string
+
+    MessageDeliveryResponse:
+      type: object
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [delivered]
+        delivered_at:
+          type: string
+          format: date-time
+
+    MessageStatusUpdate:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [queued, processing, delivered, failed]
+        attempt_count:
+          type: integer
+        error_message:
+          type: string
+
+    MessageStatusResponse:
+      type: object
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        attempt_count:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+
+    MessageListResponse:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageSummary'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    MessageSummary:
+      type: object
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        sender_number_masked:
+          type: string
+          example: "+123****7890"
+        status:
+          type: string
+          enum: [queued, delivered, failed]
+        created_at:
+          type: string
+          format: date-time
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        attempt_count:
+          type: integer
+
+    MessageDetailResponse:
+      type: object
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        sender_number_masked:
+          type: string
+        message_body:
+          type: string
+          description: Decrypted message body
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        queued_at:
+          type: string
+          format: date-time
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        attempt_count:
+          type: integer
+        domain:
+          type: string
+
+    # ==================== Certificate Schemas ====================
+    
+    CertificateGenerationRequest:
+      type: object
+      required:
+        - client_name
+      properties:
+        client_name:
+          type: string
+          example: "client_001"
+        domain:
+          type: string
+          example: "example.com"
+        validity_days:
+          type: integer
+          default: 365
+          minimum: 1
+          maximum: 3650
+
+    CertificateGenerationResponse:
+      type: object
+      properties:
+        client_id:
+          type: string
+        certificate:
+          type: string
+          description: PEM-encoded certificate
+        private_key:
+          type: string
+          description: PEM-encoded private key (returned only once)
+        fingerprint:
+          type: string
+          example: "SHA256:abc123..."
+        expires_at:
+          type: string
+          format: date-time
+        ca_certificate:
+          type: string
+          description: CA certificate for verification
+
+    CertificateRevocationRequest:
+      type: object
+      required:
+        - client_id
+      properties:
+        client_id:
+          type: string
+        reason:
+          type: string
+          example: "Compromised"
+
+    CertificateRevocationResponse:
+      type: object
+      properties:
+        client_id:
+          type: string
+        status:
+          type: string
+          enum: [revoked]
+        revoked_at:
+          type: string
+          format: date-time
+
+    CertificateListResponse:
+      type: object
+      properties:
+        certificates:
+          type: array
+          items:
+            $ref: '#/components/schemas/CertificateSummary'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CertificateSummary:
+      type: object
+      properties:
+        client_id:
+          type: string
+        fingerprint:
+          type: string
+        status:
+          type: string
+          enum: [active, revoked, expired]
+        domain:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    # ==================== User Schemas ====================
+    
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          example: "SecurePass123!"
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        token_type:
+          type: string
+          enum: [bearer]
+        expires_in:
+          type: integer
+          description: Token validity in seconds
+          example: 1800
+        user:
+          $ref: '#/components/schemas/UserProfile'
+
+    UserCreationRequest:
+      type: object
+      required:
+        - email
+        - password
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        role:
+          type: string
+          enum: [user, admin]
+        client_id:
+          type: string
+
+    UserResponse:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        email:
+          type: string
+        role:
+          type: string
+        client_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    UserListResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserResponse'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    UserProfile:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        email:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        client_id:
+          type: string
+        last_login:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    # ==================== System Schemas ====================
+    
+    SystemStatsResponse:
+      type: object
+      properties:
+        messages:
+          type: object
+          properties:
+            total:
+              type: integer
+            queued:
+              type: integer
+            delivered:
+              type: integer
+            failed:
+              type: integer
+        performance:
+          type: object
+          properties:
+            avg_delivery_time_seconds:
+              type: number
+            success_rate:
+              type: number
+            queue_size:
+              type: integer
+        clients:
+          type: object
+          properties:
+            total:
+              type: integer
+            active:
+              type: integer
+            revoked:
+              type: integer
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+            redis:
+              type: string
+            filesystem:
+              type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        pages:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+
