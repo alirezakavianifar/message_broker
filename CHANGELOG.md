@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### In Progress
-- Phase 2: API & Database specification
+- Phase 3: Certificate issuance & authentication workflow
 
 ### Planned
 - Proxy server implementation
@@ -16,15 +16,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Worker implementation with retry logic
 - Web portal (user and admin interfaces)
 - Prometheus + Grafana monitoring
-- Database migrations
 
 ### Completed
 - Phase 0: Project setup and repository structure
 - Phase 1: Design document with architecture and specifications
+- Phase 2: API & Database specifications
 
 ## [1.0.0] - TBD
 
 ### Added
+
+#### Phase 2 (October 2025)
+- **OpenAPI/Swagger Specifications**:
+  - `proxy/openapi.yaml` - Complete Proxy API specification (message submission, health, metrics)
+  - `main_server/openapi.yaml` - Complete Main Server API specification (internal, admin, portal endpoints)
+- **Database Schema**:
+  - `main_server/schema.sql` - Complete MySQL DDL with tables, views, stored procedures, triggers
+  - Tables: users, clients, messages, audit_log
+  - Views for statistics and reporting
+  - Stored procedures for common operations
+  - Audit triggers for security events
+- **SQLAlchemy ORM**:
+  - `main_server/models.py` - Complete database models with relationships
+  - `main_server/database.py` - Database manager with connection pooling and session management
+- **Encryption & Security**:
+  - `main_server/encryption.py` - AES-256 encryption, SHA-256 hashing, key rotation support
+  - Phone number masking utilities
+  - Key management helpers
+- **Database Migrations**:
+  - Alembic configuration and environment setup
+  - Initial schema migration script
+- **API Documentation**:
+  - `API_SPECIFICATION.md` - Complete API documentation with examples for all endpoints
 
 #### Phase 1 (October 2025)
 - **DESIGN.md** - Comprehensive system design document including:
@@ -114,11 +137,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [x] Authentication model specification
 - [x] Stakeholder approval (pending)
 
-### Phase 2 - API & Database (Target: TBD)
-- [ ] OpenAPI/Swagger specification
-- [ ] MySQL schema design
-- [ ] Encryption implementation
-- [ ] API documentation
+### Phase 2 - API & Database ✅ COMPLETED
+- [x] OpenAPI/Swagger specification
+- [x] MySQL schema design
+- [x] Encryption implementation
+- [x] API documentation
 
 ### Phase 3 - Certificate Management (Target: TBD)
 - [ ] CA setup scripts
