@@ -1,0 +1,48 @@
+# Proxy Server Configuration
+
+server:
+  host: "0.0.0.0"
+  port: 8001
+  workers: 4
+
+redis:
+  host: "${REDIS_HOST}"
+  port: ${REDIS_PORT}
+  db: ${REDIS_DB}
+  password: "${REDIS_PASSWORD}"
+  queue_name: "message_queue"
+  
+tls:
+  enabled: true
+  cert_file: "certs/proxy.crt"
+  key_file: "certs/proxy.key"
+  ca_file: "certs/ca.crt"
+  verify_client: true
+
+main_server:
+  url: "${MAIN_SERVER_URL}"
+  register_endpoint: "/internal/messages/register"
+  timeout: 30
+
+validation:
+  phone_number:
+    pattern: "^\\+[1-9]\\d{1,14}$"
+    required: true
+  message_body:
+    max_length: 1000
+    required: true
+
+logging:
+  level: "${LOG_LEVEL}"
+  file: "${LOG_FILE_PATH}/proxy.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  rotation:
+    when: "midnight"
+    interval: 1
+    backup_count: 7
+
+rate_limiting:
+  enabled: true
+  max_requests: 100
+  window_seconds: 60
+

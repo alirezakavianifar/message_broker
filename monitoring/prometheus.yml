@@ -1,0 +1,87 @@
+# Prometheus Configuration for Message Broker System
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'message_broker'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Proxy Server
+  - job_name: 'proxy'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['localhost:8001']
+        labels:
+          service: 'proxy'
+          component: 'ingestion'
+
+  # Main Server
+  - job_name: 'main_server'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          service: 'main_server'
+          component: 'persistence'
+
+  # Workers
+  - job_name: 'workers'
+    static_configs:
+      - targets: ['localhost:9100']
+        labels:
+          service: 'worker'
+          component: 'processing'
+
+  # Portal
+  - job_name: 'portal'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['localhost:8080']
+        labels:
+          service: 'portal'
+          component: 'frontend'
+
+  # Redis Exporter (optional - requires redis_exporter)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['localhost:9121']
+        labels:
+          service: 'redis'
+          component: 'queue'
+
+  # MySQL Exporter (optional - requires mysqld_exporter)
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['localhost:9104']
+        labels:
+          service: 'mysql'
+          component: 'database'
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+

@@ -1,0 +1,40 @@
+# Worker Configuration
+
+redis:
+  host: "${REDIS_HOST}"
+  port: ${REDIS_PORT}
+  db: ${REDIS_DB}
+  password: "${REDIS_PASSWORD}"
+  queue_name: "message_queue"
+  
+main_server:
+  url: "${MAIN_SERVER_URL}"
+  deliver_endpoint: "/internal/messages/deliver"
+  timeout: 30
+
+tls:
+  enabled: true
+  cert_file: "certs/worker.crt"
+  key_file: "certs/worker.key"
+  ca_file: "certs/ca.crt"
+
+worker:
+  concurrency: ${WORKER_CONCURRENCY}
+  retry_interval: ${WORKER_RETRY_INTERVAL}
+  max_attempts: ${WORKER_MAX_ATTEMPTS}
+  batch_size: 10
+  poll_interval: 1
+
+logging:
+  level: "${LOG_LEVEL}"
+  file: "${LOG_FILE_PATH}/worker.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  rotation:
+    when: "midnight"
+    interval: 1
+    backup_count: 7
+
+metrics:
+  enabled: true
+  port: 9100
+
