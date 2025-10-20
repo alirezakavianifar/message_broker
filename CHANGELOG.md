@@ -8,10 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### In Progress
-- Phase 3: Certificate issuance & authentication workflow
+- Phase 4: Proxy server implementation
 
 ### Planned
-- Proxy server implementation
 - Main server with certificate authority
 - Worker implementation with retry logic
 - Web portal (user and admin interfaces)
@@ -21,10 +20,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 0: Project setup and repository structure
 - Phase 1: Design document with architecture and specifications
 - Phase 2: API & Database specifications
+- Phase 3: Certificate management and authentication workflow
 
 ## [1.0.0] - TBD
 
 ### Added
+
+#### Phase 3 (October 2025)
+- **Certificate Management Scripts (Windows Batch)**:
+  - `init_ca.bat` - CA initialization with 4096-bit RSA
+  - `generate_cert.bat` - Client certificate generation with automatic signing
+  - `revoke_cert.bat` - Certificate revocation with CRL management
+  - `renew_cert.bat` - Certificate renewal with backup
+  - `verify_cert.bat` - Certificate verification against CA and CRL
+  - `list_certs.bat` - List all certificates with status
+- **Certificate Documentation**:
+  - `CERTIFICATES_README.md` - Comprehensive certificate management guide (700+ lines)
+  - Installation procedures
+  - Security best practices
+  - Troubleshooting guides
+  - Certificate lifecycle documentation
+- **Testing Tools**:
+  - `test_mtls.py` - Python script for mutual TLS testing
+  - `test_mtls.bat` - Windows wrapper for testing
+  - Server and client test modes
+  - Certificate validation tests
+- **Certificate Infrastructure**:
+  - OpenSSL-based CA implementation
+  - CRL (Certificate Revocation List) support
+  - Automatic fingerprint calculation
+  - Serial number tracking
+  - Backup and restore procedures
 
 #### Phase 2 (October 2025)
 - **OpenAPI/Swagger Specifications**:
@@ -143,11 +169,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [x] Encryption implementation
 - [x] API documentation
 
-### Phase 3 - Certificate Management (Target: TBD)
-- [ ] CA setup scripts
-- [ ] Certificate generation automation
-- [ ] CRL implementation
-- [ ] Certificate renewal process
+### Phase 3 - Certificate Management ✅ COMPLETED
+- [x] CA setup scripts
+- [x] Certificate generation automation
+- [x] CRL implementation
+- [x] Certificate renewal process
 
 ### Phase 4 - Proxy Implementation (Target: TBD)
 - [ ] FastAPI proxy server
