@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### In Progress
+- Phase 2: API & Database specification
+
 ### Planned
 - Proxy server implementation
 - Main server with certificate authority
@@ -14,11 +17,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web portal (user and admin interfaces)
 - Prometheus + Grafana monitoring
 - Database migrations
-- Client example scripts
+
+### Completed
+- Phase 0: Project setup and repository structure
+- Phase 1: Design document with architecture and specifications
 
 ## [1.0.0] - TBD
 
 ### Added
+
+#### Phase 1 (October 2025)
+- **DESIGN.md** - Comprehensive system design document including:
+  - System architecture and component design
+  - Message JSON schema and data formats
+  - Authentication model (Mutual TLS + JWT)
+  - Certificate lifecycle and management procedures
+  - Queue and persistence architecture (Redis AOF + MySQL)
+  - Multi-domain support configuration
+  - Technology stack with rationale
+  - Scaling strategy for 100k+ messages/day
+  - Sequence diagrams for key flows
+
+#### Phase 0 (October 2025)
 - Initial project structure
 - Development environment setup
 - Documentation (README, CONTRIBUTING)
@@ -26,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requirements files for all components
 - Windows setup and backup scripts
 - Git repository initialization
+- Verification script for setup validation
 
 ### Project Structure
 - `/proxy` - Proxy server for message ingestion
@@ -87,11 +108,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Upcoming Milestones
 
-### Phase 1 - Requirements & Design (Target: TBD)
-- [ ] Design document
-- [ ] Message schema definition
-- [ ] Authentication model specification
-- [ ] Stakeholder approval
+### Phase 1 - Requirements & Design ✅ COMPLETED
+- [x] Design document
+- [x] Message schema definition
+- [x] Authentication model specification
+- [x] Stakeholder approval (pending)
 
 ### Phase 2 - API & Database (Target: TBD)
 - [ ] OpenAPI/Swagger specification
