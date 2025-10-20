@@ -1,0 +1,43 @@
+[Unit]
+Description=Message Broker Proxy Server
+After=network.target redis.service mysql.service
+Wants=redis.service
+
+[Service]
+Type=notify
+User=messagebroker
+Group=messagebroker
+WorkingDirectory=/opt/message_broker/proxy
+Environment="PATH=/opt/message_broker/venv/bin"
+EnvironmentFile=/opt/message_broker/proxy/.env
+
+# Start command
+ExecStart=/opt/message_broker/venv/bin/uvicorn app:app \
+    --host 0.0.0.0 \
+    --port 8001 \
+    --ssl-keyfile certs/proxy.key \
+    --ssl-certfile certs/proxy.crt \
+    --ssl-ca-certs certs/ca.crt \
+    --workers 4 \
+    --log-level info
+
+# Restart policy
+Restart=always
+RestartSec=10
+KillMode=mixed
+TimeoutStopSec=30
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/message_broker/proxy/logs
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=512
+
+[Install]
+WantedBy=multi-user.target
+
