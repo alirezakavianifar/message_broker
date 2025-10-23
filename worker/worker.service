@@ -1,0 +1,51 @@
+[Unit]
+Description=Message Broker Worker - Message Processing Service
+After=network.target redis.service mysql.service
+Wants=redis.service mysql.service
+
+[Service]
+Type=simple
+User=messagebroker
+Group=messagebroker
+WorkingDirectory=/opt/message_broker/worker
+
+# Environment configuration
+EnvironmentFile=/opt/message_broker/.env
+Environment="WORKER_ID=worker-%i"
+Environment="PYTHONUNBUFFERED=1"
+
+# Virtual environment activation
+ExecStart=/opt/message_broker/venv/bin/python /opt/message_broker/worker/worker.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=5min
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/message_broker/worker/logs
+ReadOnlyPaths=/opt/message_broker/worker/certs
+
+# Resource limits
+LimitNOFILE=65536
+MemoryLimit=1G
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=message-broker-worker-%i
+
+# Process management
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+

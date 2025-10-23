@@ -84,7 +84,7 @@ class User(Base):
         comment="bcrypt hashed password"
     )
     role = Column(
-        Enum(UserRole),
+        Enum(UserRole, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=UserRole.USER,
         index=True
@@ -163,7 +163,7 @@ class Client(Base):
         index=True
     )
     status = Column(
-        Enum(ClientStatus),
+        Enum(ClientStatus, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=ClientStatus.ACTIVE,
         index=True
@@ -273,7 +273,7 @@ class Message(Base):
         comment="Key version for rotation support"
     )
     status = Column(
-        Enum(MessageStatus),
+        Enum(MessageStatus, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=MessageStatus.QUEUED,
         index=True

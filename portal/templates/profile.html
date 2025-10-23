@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - Message Broker Portal{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <!-- Header -->
+            <div class="mb-4">
+                <h2>
+                    <i class="bi bi-person-circle"></i> User Profile
+                </h2>
+                <p class="text-muted">Your account information</p>
+            </div>
+            
+            <!-- Profile Card -->
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <div class="row mb-4">
+                        <div class="col-auto">
+                            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" 
+                                 style="width: 80px; height: 80px; font-size: 2rem;">
+                                <i class="bi bi-person-fill"></i>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <h4 class="mb-1">{{ profile.email }}</h4>
+                            <span class="badge {% if profile.role == 'admin' %}bg-warning text-dark{% else %}bg-primary{% endif %}">
+                                {{ profile.role|title }}
+                            </span>
+                            {% if profile.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="row g-3">
+                        <div class="col-sm-4">
+                            <label class="text-muted small">User ID</label>
+                            <p class="mb-0 fw-semibold">{{ profile.id }}</p>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="text-muted small">Role</label>
+                            <p class="mb-0 fw-semibold">{{ profile.role|title }}</p>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="text-muted small">Status</label>
+                            <p class="mb-0 fw-semibold">
+                                {% if profile.is_active %}
+                                <span class="text-success"><i class="bi bi-check-circle-fill"></i> Active</span>
+                                {% else %}
+                                <span class="text-danger"><i class="bi bi-x-circle-fill"></i> Inactive</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="text-muted small">Member Since</label>
+                            <p class="mb-0 fw-semibold">{{ profile.created_at | datetimeformat }}</p>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="text-muted small">Last Login</label>
+                            <p class="mb-0 fw-semibold">{{ profile.last_login_at | datetimeformat if profile.last_login_at else 'Never' }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="mt-3 text-center">
+                <a href="/dashboard" class="btn btn-outline-primary">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

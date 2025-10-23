@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Message Broker Portal{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2>
+                <i class="bi bi-graph-up"></i> Admin Dashboard
+            </h2>
+            <p class="text-muted">System statistics and overview</p>
+        </div>
+    </div>
+    
+    <!-- Stats Cards -->
+    <div class="row g-3 mb-4">
+        <!-- Total Messages -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card stat-card border-start border-primary border-4">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <p class="stat-label mb-1">Total Messages</p>
+                            <p class="stat-number text-primary">{{ "{:,}".format(stats.total_messages) }}</p>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-envelope-fill text-primary" style="font-size: 2.5rem; opacity: 0.3;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Total Clients -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card stat-card border-start border-info border-4">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <p class="stat-label mb-1">Total Clients</p>
+                            <p class="stat-number text-info">{{ "{:,}".format(stats.total_clients) }}</p>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-people-fill text-info" style="font-size: 2.5rem; opacity: 0.3;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Active Clients -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card stat-card border-start border-success border-4">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <p class="stat-label mb-1">Active Clients</p>
+                            <p class="stat-number text-success">{{ "{:,}".format(stats.active_clients) }}</p>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-check-circle-fill text-success" style="font-size: 2.5rem; opacity: 0.3;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Revoked Clients -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card stat-card border-start border-danger border-4">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <p class="stat-label mb-1">Revoked Clients</p>
+                            <p class="stat-number text-danger">{{ "{:,}".format(stats.revoked_clients) }}</p>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-x-circle-fill text-danger" style="font-size: 2.5rem; opacity: 0.3;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Message Status Breakdown -->
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-pie-chart"></i> Message Status Breakdown
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th class="text-end">Count</th>
+                                    <th class="text-end">Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for status, count in stats.messages_by_status.items() %}
+                                <tr>
+                                    <td>
+                                        {% if status == 'delivered' %}
+                                        <span class="badge bg-success">{{ status|title }}</span>
+                                        {% elif status == 'queued' %}
+                                        <span class="badge bg-primary">{{ status|title }}</span>
+                                        {% elif status == 'failed' %}
+                                        <span class="badge bg-danger">{{ status|title }}</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ status|title }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">{{ "{:,}".format(count) }}</td>
+                                    <td class="text-end">
+                                        {% if stats.total_messages > 0 %}
+                                        {{ "%.1f"|format((count / stats.total_messages * 100)) }}%
+                                        {% else %}
+                                        0.0%
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Activity -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-clock-history"></i> Recent Activity
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Messages (Last 24h)</span>
+                            <strong>{{ "{:,}".format(stats.messages_last_24h) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            {% set pct_24h = (stats.messages_last_24h / stats.total_messages * 100) if stats.total_messages > 0 else 0 %}
+                            <div class="progress-bar bg-primary" style="width: {{ pct_24h }}%">
+                                {{ "%.1f"|format(pct_24h) }}%
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Messages (Last 7 days)</span>
+                            <strong>{{ "{:,}".format(stats.messages_last_7d) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            {% set pct_7d = (stats.messages_last_7d / stats.total_messages * 100) if stats.total_messages > 0 else 0 %}
+                            <div class="progress-bar bg-info" style="width: {{ pct_7d }}%">
+                                {{ "%.1f"|format(pct_7d) }}%
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="text-center mt-3">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i>
+                            Statistics updated in real-time
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-lightning-fill"></i> Quick Actions
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <a href="/admin/users" class="btn btn-outline-primary w-100 py-3">
+                                <i class="bi bi-people"></i><br>
+                                Manage Users
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="/admin/certificates" class="btn btn-outline-success w-100 py-3">
+                                <i class="bi bi-shield-check"></i><br>
+                                Certificates
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="/admin/messages" class="btn btn-outline-info w-100 py-3">
+                                <i class="bi bi-envelope"></i><br>
+                                View Messages
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="/dashboard" class="btn btn-outline-secondary w-100 py-3">
+                                <i class="bi bi-speedometer2"></i><br>
+                                User Dashboard
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -9,13 +9,13 @@ import logging
 from contextlib import contextmanager
 from typing import Generator
 
-from sqlalchemy import create_engine, event, pool
+from sqlalchemy import create_engine, event, pool, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
-from .models import Base
+from main_server.models import Base
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +186,7 @@ class DatabaseManager:
         """
         try:
             with self.get_session() as session:
-                session.execute("SELECT 1")
+                session.execute(text("SELECT 1"))
             return True
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
@@ -305,7 +305,7 @@ def test_connection(database_url: str) -> bool:
     try:
         engine = create_engine(database_url)
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         engine.dispose()
         return True
     except Exception as e:

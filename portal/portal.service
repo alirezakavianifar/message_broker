@@ -1,0 +1,54 @@
+[Unit]
+Description=Message Broker Portal - Web Interface
+After=network.target
+Wants=main_server.service
+
+[Service]
+Type=simple
+User=messagebroker
+Group=messagebroker
+WorkingDirectory=/opt/message_broker/portal
+
+# Environment configuration
+EnvironmentFile=/opt/message_broker/.env
+Environment="PYTHONUNBUFFERED=1"
+Environment="PORTAL_HOST=0.0.0.0"
+Environment="PORTAL_PORT=8080"
+
+# Virtual environment activation and portal start
+ExecStart=/opt/message_broker/venv/bin/uvicorn portal.app:app \
+    --host 0.0.0.0 \
+    --port 8080 \
+    --log-level info
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=5min
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/message_broker/portal/logs
+
+# Resource limits
+LimitNOFILE=65536
+MemoryLimit=1G
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=message-broker-portal
+
+# Process management
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+

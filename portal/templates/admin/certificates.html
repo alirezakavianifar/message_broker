@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Certificate Management - Message Broker Portal{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2>
+                <i class="bi bi-shield-check"></i> Certificate Management
+            </h2>
+            <p class="text-muted">Generate and revoke client certificates</p>
+        </div>
+    </div>
+    
+    <!-- Alerts -->
+    {% if success %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill"></i> {{ success }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i> {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <!-- Generate Certificate -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <i class="bi bi-plus-circle"></i> Generate Client Certificate
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/admin/certificates/generate">
+                        <div class="mb-3">
+                            <label for="client_id_gen" class="form-label">Client ID *</label>
+                            <input type="text" class="form-control" id="client_id_gen" name="client_id" required>
+                            <small class="form-text text-muted">Unique identifier for the client</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="domain" class="form-label">Domain (Optional)</label>
+                            <input type="text" class="form-control" id="domain" name="domain" placeholder="example.com">
+                            <small class="form-text text-muted">Associated domain for the client</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="validity_days" class="form-label">Validity (Days) *</label>
+                            <input type="number" class="form-control" id="validity_days" name="validity_days" value="365" min="1" max="3650" required>
+                            <small class="form-text text-muted">Certificate validity period (1-3650 days)</small>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-file-earmark-plus"></i> Generate Certificate
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Revoke Certificate -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-danger text-white">
+                    <i class="bi bi-x-circle"></i> Revoke Client Certificate
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/admin/certificates/revoke" onsubmit="return confirmAction('Are you sure you want to revoke this certificate?');">
+                        <div class="mb-3">
+                            <label for="client_id_rev" class="form-label">Client ID *</label>
+                            <input type="text" class="form-control" id="client_id_rev" name="client_id" required>
+                            <small class="form-text text-muted">Client whose certificate will be revoked</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="reason" class="form-label">Revocation Reason *</label>
+                            <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>
+                            <small class="form-text text-muted">Explain why the certificate is being revoked</small>
+                        </div>
+                        <button type="submit" class="btn btn-danger w-100">
+                            <i class="bi bi-shield-x"></i> Revoke Certificate
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Info Card -->
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-info-circle"></i> Certificate Management Information
+        </div>
+        <div class="card-body">
+            <h6>Important Notes:</h6>
+            <ul>
+                <li>Generated certificates use mutual TLS for secure client authentication</li>
+                <li>Certificates are automatically validated against the Certificate Revocation List (CRL)</li>
+                <li>Certificate files are stored in <code>main_server/certs/</code> directory</li>
+                <li>Revoked certificates are logged in the audit trail</li>
+                <li>Use the admin CLI for advanced certificate operations: <code>python admin_cli.py cert list</code></li>
+            </ul>
+            
+            <h6 class="mt-3">Certificate Distribution:</h6>
+            <p class="mb-0">
+                After generating a certificate, securely distribute the following files to the client:
+            </p>
+            <ol class="mb-0">
+                <li><code>client_id.crt</code> - Client certificate</li>
+                <li><code>client_id.key</code> - Private key</li>
+                <li><code>ca.crt</code> - CA certificate</li>
+            </ol>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

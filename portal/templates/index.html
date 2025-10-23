@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome - Message Broker Portal{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-10 col-lg-8">
+            <!-- Hero Section -->
+            <div class="card border-0 shadow-lg">
+                <div class="card-body text-center p-5">
+                    <i class="bi bi-envelope-check-fill text-primary" style="font-size: 4rem;"></i>
+                    <h1 class="mt-4 mb-3">Message Broker Portal</h1>
+                    <p class="lead text-muted mb-4">
+                        Secure message management system with real-time monitoring and delivery tracking
+                    </p>
+                    <a href="/login" class="btn btn-primary btn-lg px-5">
+                        <i class="bi bi-box-arrow-in-right"></i> Login to Dashboard
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Features -->
+            <div class="row mt-5">
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center p-4">
+                            <i class="bi bi-shield-check text-success" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3">Secure</h5>
+                            <p class="text-muted small">
+                                End-to-end encryption with mutual TLS authentication and encrypted storage
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center p-4">
+                            <i class="bi bi-speedometer2 text-primary" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3">Real-time</h5>
+                            <p class="text-muted small">
+                                Track message delivery status in real-time with comprehensive monitoring
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center p-4">
+                            <i class="bi bi-graph-up text-info" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3">Scalable</h5>
+                            <p class="text-muted small">
+                                Handle high-volume message traffic with automatic retry and queue management
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System Info -->
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">System Features</h6>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            Message delivery with automatic retry
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            Certificate-based client authentication
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            Encrypted message storage (AES-256)
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            Real-time monitoring and metrics
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            Role-based access control
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
