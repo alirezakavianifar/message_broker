@@ -3,7 +3,7 @@
 
 param(
     [string]$HostAddress = "0.0.0.0",
-    [int]$Port = 8080,
+    [int]$Port = 5000,
     [string]$LogLevel = "INFO",
     [switch]$Reload
 )
@@ -73,12 +73,12 @@ if (-not (Test-Path "templates")) {
     exit 1
 }
 
-Write-Host "✓ Templates directory found" -ForegroundColor Green
+Write-Host "[OK] Templates directory found" -ForegroundColor Green
 
 # Create logs directory
 if (-not (Test-Path "logs")) {
     New-Item -ItemType Directory -Path "logs" | Out-Null
-    Write-Host "✓ Created logs directory" -ForegroundColor Green
+    Write-Host "[OK] Created logs directory" -ForegroundColor Green
 }
 
 # Build uvicorn command
@@ -91,7 +91,7 @@ $uvicornArgs = @(
 
 if ($Reload) {
     $uvicornArgs += "--reload"
-    Write-Host "⚠ Auto-reload enabled (development mode)" -ForegroundColor Yellow
+    Write-Host "[WARN] Auto-reload enabled (development mode)" -ForegroundColor Yellow
 }
 
 Write-Host ""

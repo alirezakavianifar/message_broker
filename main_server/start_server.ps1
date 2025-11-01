@@ -48,7 +48,7 @@ if (Test-Path "..\.env") {
 if (-not $env:DATABASE_URL) { 
     $env:DATABASE_URL = "mysql+pymysql://systemuser:StrongPass123!@localhost/message_system" 
 }
-if (-not $env:MAIN_SERVER_HOST) { $env:MAIN_SERVER_HOST = $Host }
+if (-not $env:MAIN_SERVER_HOST) { $env:MAIN_SERVER_HOST = $HostAddress }
 if (-not $env:MAIN_SERVER_PORT) { $env:MAIN_SERVER_PORT = $Port }
 if (-not $env:LOG_LEVEL) { $env:LOG_LEVEL = $LogLevel }
 if (-not $env:METRICS_ENABLED) { $env:METRICS_ENABLED = "true" }
@@ -72,7 +72,7 @@ Write-Host ""
 # Check database connection
 Write-Host "Checking database connection..." -ForegroundColor Green
 try {
-    $dbCheck = python -c "import pymysql; import os; url = os.environ.get('DATABASE_URL'); parts = url.split('//')[1].split('@'); creds = parts[0].split(':'); host_db = parts[1].split('/'); host = host_db[0].split(':')[0]; port = int(host_db[0].split(':')[1]) if ':' in host_db[0] else 3306; db = host_db[1].split('?')[0]; conn = pymysql.connect(host=host, port=port, user=creds[0], password=creds[1], database=db); conn.close(); print('✓ Database connection successful')" 2>&1
+    $dbCheck = python -c "import pymysql; import os; url = os.environ.get('DATABASE_URL'); parts = url.split('//')[1].split('@'); creds = parts[0].split(':'); host_db = parts[1].split('/'); host = host_db[0].split(':')[0]; port = int(host_db[0].split(':')[1]) if ':' in host_db[0] else 3306; db = host_db[1].split('?')[0]; conn = pymysql.connect(host=host, port=port, user=creds[0], password=creds[1], database=db); conn.close(); print('[OK] Database connection successful')" 2>&1
     Write-Host $dbCheck -ForegroundColor Green
 } catch {
     Write-Host "WARNING: Cannot connect to database" -ForegroundColor Yellow
@@ -101,14 +101,14 @@ if (-not $NoTLS) {
         exit 1
     }
     
-    Write-Host "✓ All certificates found" -ForegroundColor Green
+    Write-Host "[OK] All certificates found" -ForegroundColor Green
 }
 
 # Create necessary directories
 @("logs", "secrets") | ForEach-Object {
     if (-not (Test-Path $_)) {
         New-Item -ItemType Directory -Path $_ | Out-Null
-        Write-Host "✓ Created $_ directory" -ForegroundColor Green
+        Write-Host "[OK] Created $_ directory" -ForegroundColor Green
     }
 }
 
@@ -117,12 +117,12 @@ if (-not (Test-Path $env:ENCRYPTION_KEY_PATH)) {
     Write-Host "Generating encryption key..." -ForegroundColor Green
     $pyCmd = "from cryptography.fernet import Fernet; import os; key_path = os.environ.get('ENCRYPTION_KEY_PATH'); os.makedirs(os.path.dirname(key_path), exist_ok=True); open(key_path, 'wb').write(Fernet.generate_key())"
     python -c $pyCmd
-    Write-Host "✓ Encryption key generated at $env:ENCRYPTION_KEY_PATH" -ForegroundColor Green
+    Write-Host "[OK] Encryption key generated at $env:ENCRYPTION_KEY_PATH" -ForegroundColor Green
 }
 
 # Build uvicorn command
 $uvicornArgs = @(
-    "main_server.api:app",
+    "api:app",
     "--host", $env:MAIN_SERVER_HOST,
     "--port", $env:MAIN_SERVER_PORT,
     "--log-level", $env:LOG_LEVEL.ToLower()
@@ -138,7 +138,7 @@ if (-not $NoTLS) {
 
 if ($Reload) {
     $uvicornArgs += "--reload"
-    Write-Host "⚠ Auto-reload enabled (development mode)" -ForegroundColor Yellow
+    Write-Host "[WARN] Auto-reload enabled (development mode)" -ForegroundColor Yellow
 }
 
 Write-Host ""

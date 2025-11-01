@@ -81,14 +81,14 @@ Write-Host ""
 
 # Check Redis connection
 Write-Host "Checking Redis connection..." -ForegroundColor Green
-try {
-    $redisCheck = python -c "import redis; r = redis.Redis(host='$env:REDIS_HOST', port=$env:REDIS_PORT, db=$env:REDIS_DB, password='$env:REDIS_PASSWORD' if '$env:REDIS_PASSWORD' else None); r.ping(); print('✓ Redis is running')"
-    Write-Host $redisCheck -ForegroundColor Green
-} catch {
-    Write-Host "WARNING: Cannot connect to Redis at $env:REDIS_HOST:$env:REDIS_PORT" -ForegroundColor Red
-    Write-Host "Make sure Redis is running: redis-server --service-start" -ForegroundColor Yellow
-    exit 1
-}
+    try {
+        $redisCheck = python -c "import redis; r = redis.Redis(host='$env:REDIS_HOST', port=$env:REDIS_PORT, db=$env:REDIS_DB, password='$env:REDIS_PASSWORD' if '$env:REDIS_PASSWORD' else None); r.ping(); print('[OK] Redis is running')"
+        Write-Host $redisCheck -ForegroundColor Green
+    } catch {
+        Write-Host "WARNING: Cannot connect to Redis at $env:REDIS_HOST:$env:REDIS_PORT" -ForegroundColor Red
+        Write-Host "Make sure Redis is running: redis-server --service-start" -ForegroundColor Yellow
+        exit 1
+    }
 
 # Check certificates
 $certFiles = @(
@@ -105,7 +105,7 @@ foreach ($cert in $certFiles) {
     }
 }
 
-Write-Host "✓ All certificates found" -ForegroundColor Green
+Write-Host "[OK] All certificates found" -ForegroundColor Green
 
 # Create logs directory
 if (-not (Test-Path "logs")) {

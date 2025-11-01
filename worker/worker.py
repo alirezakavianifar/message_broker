@@ -102,20 +102,27 @@ def setup_logging():
     logger.addHandler(console_handler)
     
     # File handler with daily rotation
-    log_file = config.log_dir / "worker.log"
-    file_handler = TimedRotatingFileHandler(
-        log_file,
-        when='midnight',
-        interval=1,
-        backupCount=7,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - [%(worker_id)s] - [%(filename)s:%(lineno)d] - %(message)s'
-    )
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
+    # Use try-except to handle Windows log rotation issues with multiple workers
+    try:
+        log_file = config.log_dir / "worker.log"
+        file_handler = TimedRotatingFileHandler(
+            log_file,
+            when='midnight',
+            interval=1,
+            backupCount=7,
+            encoding='utf-8',
+            delay=True  # Delay file opening to reduce lock conflicts
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - [%(worker_id)s] - [%(filename)s:%(lineno)d] - %(message)s'
+        )
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+    except Exception as e:
+        # If file logging fails (e.g., permission issues), continue with console only
+        print(f"Warning: Could not setup file logging: {e}")
+        print("Continuing with console logging only...")
     
     return logger
 

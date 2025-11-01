@@ -39,15 +39,15 @@ def print_test(name):
     print(f"\n{BLUE}TEST: {name}{RESET}")
 
 def print_pass(msg):
-    print(f"{GREEN}✓ {msg}{RESET}")
+    print(f"{GREEN}[OK] {msg}{RESET}")
     test_results["passed"] += 1
 
 def print_fail(msg):
-    print(f"{RED}✗ {msg}{RESET}")
+    print(f"{RED}[FAIL] {msg}{RESET}")
     test_results["failed"] += 1
 
 def print_info(msg):
-    print(f"{YELLOW}ℹ {msg}{RESET}")
+    print(f"{YELLOW}[INFO] {msg}{RESET}")
 
 class LoadTestMetrics:
     """Track load test metrics"""

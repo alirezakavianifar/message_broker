@@ -7,9 +7,14 @@
 param(
     [switch]$Dev,
     [int]$Port = 8001,
-    [int]$Workers = 4,
+    [int]$Workers = 1,  # Default to 1 worker on Windows to avoid log rotation issues
     [switch]$NoTLS
 )
+
+$ErrorActionPreference = "Stop"
+
+# Change to script directory
+Set-Location $PSScriptRoot
 
 Write-Host "============================================================================" -ForegroundColor Cyan
 Write-Host "Message Broker Proxy Server" -ForegroundColor Cyan
@@ -52,10 +57,10 @@ if (-not (Test-Path "logs")) {
     New-Item -ItemType Directory -Path "logs" -Force | Out-Null
 }
 
-# Load environment variables
-if (Test-Path ".env") {
+# Load environment variables from parent .env if exists
+if (Test-Path "..\.env") {
     Write-Host "[INFO] Loading environment from .env" -ForegroundColor Yellow
-    Get-Content .env | ForEach-Object {
+    Get-Content "..\.env" | ForEach-Object {
         if ($_ -match '^\s*([^#][^=]*?)\s*=\s*(.*?)\s*$') {
             $name = $matches[1]
             $value = $matches[2]
@@ -63,6 +68,15 @@ if (Test-Path ".env") {
         }
     }
 }
+
+# Set default environment variables if not already set
+if (-not $env:REDIS_HOST) { $env:REDIS_HOST = "localhost" }
+if (-not $env:REDIS_PORT) { $env:REDIS_PORT = "6379" }
+if (-not $env:REDIS_DB) { $env:REDIS_DB = "0" }
+if (-not $env:REDIS_PASSWORD) { $env:REDIS_PASSWORD = "" }
+if (-not $env:MAIN_SERVER_URL) { $env:MAIN_SERVER_URL = "https://localhost:8000" }
+if (-not $env:LOG_LEVEL) { $env:LOG_LEVEL = "INFO" }
+if (-not $env:LOG_FILE_PATH) { $env:LOG_FILE_PATH = "logs" }
 
 # Display configuration
 Write-Host ""

@@ -24,13 +24,13 @@ def print_section(msg):
     print(f"{BLUE}{'-'*60}{RESET}")
 
 def print_pass(msg):
-    print(f"  {GREEN}✓{RESET} {msg}")
+    print(f"  {GREEN}[OK]{RESET} {msg}")
 
 def print_fail(msg):
-    print(f"  {RED}✗{RESET} {msg}")
+    print(f"  {RED}[FAIL]{RESET} {msg}")
 
 def print_info(msg):
-    print(f"  {YELLOW}ℹ{RESET} {msg}")
+    print(f"  {YELLOW}[INFO]{RESET} {msg}")
 
 def check_python_version():
     """Check Python version"""
@@ -241,16 +241,16 @@ def main():
     total = len(results)
     
     for name, result in results:
-        status = f"{GREEN}✓ PASS{RESET}" if result else f"{RED}✗ FAIL{RESET}"
+        status = f"{GREEN}[PASS]{RESET}" if result else f"{RED}[FAIL]{RESET}"
         print(f"  {name:25s} {status}")
     
     print(f"\n{CYAN}{'='*60}{RESET}")
     if passed == total:
-        print(f"{GREEN}✓ ALL CHECKS PASSED ({passed}/{total}){RESET}")
+        print(f"{GREEN}[OK] ALL CHECKS PASSED ({passed}/{total}){RESET}")
         print(f"{GREEN}  Environment is ready for testing!{RESET}")
         sys.exit(0)
     else:
-        print(f"{RED}✗ SOME CHECKS FAILED ({passed}/{total}){RESET}")
+        print(f"{RED}[FAIL] SOME CHECKS FAILED ({passed}/{total}){RESET}")
         print(f"{YELLOW}  Please fix the issues above before running tests.{RESET}")
         sys.exit(1)
 

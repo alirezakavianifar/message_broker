@@ -20,6 +20,11 @@ REDIS_HOST = "localhost"
 REDIS_PORT = 6379
 VERIFY_SSL = False
 
+# Client certificate paths
+CLIENT_CERT = Path(__file__).parent.parent / "client-scripts" / "certs" / "test_client.crt"
+CLIENT_KEY = Path(__file__).parent.parent / "client-scripts" / "certs" / "test_client.key"
+CA_CERT = Path(__file__).parent.parent / "main_server" / "certs" / "ca.crt"
+
 # Colors
 GREEN = '\033[92m'
 RED = '\033[91m'
@@ -33,15 +38,15 @@ def print_test(name):
     print(f"\n{BLUE}TEST: {name}{RESET}")
 
 def print_pass(msg):
-    print(f"{GREEN}✓ {msg}{RESET}")
+    print(f"{GREEN}[OK] {msg}{RESET}")
     test_results["passed"] += 1
 
 def print_fail(msg):
-    print(f"{RED}✗ {msg}{RESET}")
+    print(f"{RED}[FAIL] {msg}{RESET}")
     test_results["failed"] += 1
 
 def print_info(msg):
-    print(f"{YELLOW}ℹ {msg}{RESET}")
+    print(f"{YELLOW}[INFO] {msg}{RESET}")
 
 async def test_end_to_end_message_flow():
     """TC-I-001: Complete message delivery flow"""
@@ -54,14 +59,14 @@ async def test_end_to_end_message_flow():
     try:
         # Step 1: Submit message to proxy
         print_info("Step 1: Submitting message to proxy...")
-        async with httpx.AsyncClient(verify=VERIFY_SSL) as client:
+        cert = (str(CLIENT_CERT), str(CLIENT_KEY)) if CLIENT_CERT.exists() and CLIENT_KEY.exists() else None
+        async with httpx.AsyncClient(cert=cert, verify=False) as client:
             response = await client.post(
                 f"{PROXY_URL}/api/v1/messages",
                 json={
                     "sender_number": sender_number,
                     "message_body": message_body
-                },
-                headers={"X-Client-ID": "test_client"}
+                }
             )
             
             if response.status_code == 200:
@@ -95,22 +100,22 @@ async def test_end_to_end_message_flow():
         print_fail(f"End-to-end test failed: {e}")
 
 async def test_proxy_to_main_server():
-    """TC-I-010: Proxy → Main Server communication"""
-    print_test("Proxy → Main Server Communication")
+    """TC-I-010: Proxy -> Main Server communication"""
+    print_test("Proxy -> Main Server Communication")
     
     try:
         # Verify proxy can register messages with main server
         message_id = str(uuid.uuid4())
         
-        async with httpx.AsyncClient(verify=VERIFY_SSL) as client:
+        cert = (str(CLIENT_CERT), str(CLIENT_KEY)) if CLIENT_CERT.exists() and CLIENT_KEY.exists() else None
+        async with httpx.AsyncClient(cert=cert, verify=False) as client:
             # Submit to proxy
             response = await client.post(
                 f"{PROXY_URL}/api/v1/messages",
                 json={
                     "sender_number": "+4915200000001",
                     "message_body": "Proxy test message"
-                },
-                headers={"X-Client-ID": "test_client"}
+                }
             )
             
             if response.status_code == 200:
@@ -122,7 +127,7 @@ async def test_proxy_to_main_server():
         print_fail(f"Proxy-MainServer test failed: {e}")
 
 async def test_redis_integration():
-    """TC-I-013: All components → Redis"""
+    """TC-I-013: All components -> Redis"""
     print_test("Redis Integration")
     
     try:

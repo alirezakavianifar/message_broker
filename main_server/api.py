@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 import uuid
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -35,6 +36,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, text
 import jwt
 from passlib.context import CryptContext
+import redis
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -258,6 +260,9 @@ db_manager: Optional[DatabaseManager] = None
 # Encryption manager
 encryption_manager: Optional[EncryptionManager] = None
 
+# Redis connection for enqueuing messages
+redis_client: Optional[redis.Redis] = None
+
 # ============================================================================
 # Lifespan Management
 # ============================================================================
@@ -266,7 +271,7 @@ encryption_manager: Optional[EncryptionManager] = None
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown"""
     # Startup
-    global db_manager, encryption_manager
+    global db_manager, encryption_manager, redis_client
     
     logger.info("Starting Main Server...")
     
@@ -294,12 +299,38 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize encryption: {e}")
         raise
     
+    # Initialize Redis connection (optional, for enqueuing messages)
+    try:
+        redis_host = os.getenv("REDIS_HOST", "localhost")
+        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        redis_password = os.getenv("REDIS_PASSWORD", None)
+        redis_client = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            password=redis_password if redis_password else None,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_keepalive=True
+        )
+        redis_client.ping()
+        logger.info(f"Redis connection initialized at {redis_host}:{redis_port}")
+    except Exception as e:
+        logger.warning(f"Redis connection failed (messages may not be enqueued): {e}")
+        redis_client = None  # Continue without Redis - proxy will handle enqueuing
+    
     logger.info("Main Server started successfully")
     
     yield
     
     # Shutdown
     logger.info("Shutting down Main Server...")
+    
+    if redis_client:
+        try:
+            redis_client.close()
+            logger.info("Redis connection closed")
+        except Exception:
+            pass
     
     if db_manager:
         db_manager.dispose()
@@ -574,6 +605,28 @@ async def register_message(
         )
         db.add(audit)
         db.commit()
+        
+        # Enqueue message to Redis if Redis is available
+        # This ensures messages registered directly (bypassing proxy) still get processed
+        if redis_client:
+            try:
+                message_data = {
+                    "message_id": request.message_id,
+                    "sender_number": request.sender_number,
+                    "message_body": request.message_body,
+                    "client_id": request.client_id,
+                    "domain": request.domain or "default",
+                    "queued_at": request.queued_at,
+                    "attempt_count": 0,
+                    "metadata": request.metadata.dict() if request.metadata else {}
+                }
+                message_json = json.dumps(message_data)
+                redis_client.lpush("message_queue", message_json)
+                logger.debug(f"Message enqueued to Redis: {request.message_id}")
+            except Exception as e:
+                logger.warning(f"Failed to enqueue message to Redis: {e} (worker may pick it up later)")
+        else:
+            logger.debug("Redis not available, message not enqueued (proxy should handle enqueuing)")
         
         logger.info(f"Message registered: {request.message_id} for client {request.client_id}")
         
