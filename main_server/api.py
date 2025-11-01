@@ -49,7 +49,7 @@ from main_server.models import (
     MessageStatus,
 )
 from main_server.database import DatabaseManager
-from main_server.encryption import EncryptionManager
+from main_server.encryption import EncryptionManager, mask_phone_number
 
 # ============================================================================
 # Configuration
@@ -119,20 +119,27 @@ def setup_logging():
     logger.addHandler(console_handler)
     
     # File handler with daily rotation
-    log_file = config.LOG_DIR / "main_server.log"
-    file_handler = TimedRotatingFileHandler(
-        log_file,
-        when='midnight',
-        interval=1,
-        backupCount=7,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
-    )
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
+    # Use try-except to handle Windows log rotation issues with multiple workers
+    try:
+        log_file = config.LOG_DIR / "main_server.log"
+        file_handler = TimedRotatingFileHandler(
+            log_file,
+            when='midnight',
+            interval=1,
+            backupCount=7,
+            encoding='utf-8',
+            delay=True  # Delay file opening to reduce lock conflicts
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+        )
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+    except Exception as e:
+        # If file logging fails (e.g., permission issues), continue with console only
+        print(f"Warning: Could not setup file logging: {e}")
+        print("Continuing with console logging only...")
     
     return logger
 
@@ -151,11 +158,19 @@ security = HTTPBearer()
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against hash"""
     import bcrypt
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    # Truncate password to 72 bytes for bcrypt compatibility
+    password_bytes = plain_password.encode('utf-8')[:72]
+    return bcrypt.checkpw(password_bytes, hashed_password.encode('utf-8'))
 
 def get_password_hash(password: str) -> str:
-    """Generate password hash"""
-    return pwd_context.hash(password)
+    """Generate password hash (bcrypt has 72 byte limit)"""
+    import bcrypt
+    # Truncate password to 72 bytes for bcrypt compatibility
+    password_bytes = password.encode('utf-8')[:72]
+    # Use bcrypt directly to avoid passlib's length check
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create JWT access token"""
@@ -325,6 +340,11 @@ def get_db() -> Generator[Session, None, None]:
 
 def get_encryption() -> EncryptionManager:
     """Get encryption manager"""
+    if encryption_manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Encryption manager not initialized"
+        )
     return encryption_manager
 
 def get_client_from_cert(request: Request) -> str:
@@ -391,7 +411,7 @@ async def get_current_user(
         )
     
     # Update last login
-    user.last_login_at = datetime.utcnow()
+    user.last_login = datetime.utcnow()
     db.commit()
     
     return user
@@ -470,7 +490,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
-    last_login_at: Optional[datetime]
+    last_login: Optional[datetime] = None  # Changed from last_login_at to match model
 
     class Config:
         from_attributes = True
@@ -535,6 +555,7 @@ async def register_message(
             status=MessageStatus.QUEUED,
             queued_at=request.queued_at,
             attempt_count=0,
+            encryption_key_version=key_version,
         )
         
         db.add(message)
@@ -823,7 +844,7 @@ async def get_portal_messages(
             "id": msg.id,
             "message_id": msg.message_id,
             "client_id": msg.client_id,
-            "sender_number_masked": encryption.mask_phone_number(msg.sender_number_hashed),
+            "sender_number_masked": mask_phone_number(msg.sender_number_hashed) if msg.sender_number_hashed else "N/A",
             "status": msg.status.value,
             "attempt_count": msg.attempt_count,
             "created_at": msg.created_at,
@@ -834,7 +855,8 @@ async def get_portal_messages(
         # Decrypt body for authorized users
         if current_user.role == UserRole.ADMIN:
             try:
-                msg_dict["message_body"] = encryption.decrypt(msg.encrypted_body)
+                key_version = msg.encryption_key_version or 1
+                msg_dict["message_body"] = encryption.decrypt_message(msg.encrypted_body, key_version=key_version)
             except Exception as e:
                 logger.warning(f"Failed to decrypt message {msg.id}: {e}")
                 msg_dict["message_body"] = "[decryption failed]"
@@ -1014,10 +1036,22 @@ async def create_user(
             )
         
         # Create user
+        # Map role string to enum (handle case-insensitive input)
+        role_str = request.role.lower().strip()
+        if role_str == "admin":
+            user_role = UserRole.ADMIN
+        elif role_str == "user":
+            user_role = UserRole.USER
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid role: {request.role}. Must be 'user' or 'admin'"
+            )
+        
         user = User(
             email=request.email,
             password_hash=get_password_hash(request.password),
-            role=UserRole(request.role),
+            role=user_role,
             is_active=True,
         )
         
