@@ -4,12 +4,13 @@ After=network.target redis.service mysql.service
 Wants=redis.service
 
 [Service]
-Type=notify
+Type=simple
 User=messagebroker
 Group=messagebroker
 WorkingDirectory=/opt/message_broker/proxy
 Environment="PATH=/opt/message_broker/venv/bin"
-EnvironmentFile=/opt/message_broker/proxy/.env
+EnvironmentFile=-/opt/message_broker/.env
+Environment="PYTHONPATH=/opt/message_broker"
 
 # Start command
 ExecStart=/opt/message_broker/venv/bin/uvicorn app:app \

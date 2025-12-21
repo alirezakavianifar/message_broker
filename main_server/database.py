@@ -6,8 +6,13 @@ connection pooling, retry logic, and proper session management.
 """
 
 import logging
+import sys
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Generator
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import create_engine, event, pool, text
 from sqlalchemy.engine import Engine
