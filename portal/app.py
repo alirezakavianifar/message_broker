@@ -299,6 +299,110 @@ class MainServerClient:
             response.raise_for_status()
             return response.json()
 
+    async def update_user_role(
+        self,
+        access_token: str,
+        user_id: int,
+        role: str
+    ) -> dict:
+        """Update user role (admin only)"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.put(
+                f"{self.base_url}/admin/users/{user_id}/role",
+                headers=headers,
+                json={"role": role}
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def toggle_user_status(
+        self,
+        access_token: str,
+        user_id: int,
+        is_active: bool
+    ) -> dict:
+        """Activate or deactivate user"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.put(
+                f"{self.base_url}/admin/users/{user_id}/status",
+                headers=headers,
+                json={"is_active": is_active}
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def change_user_password(
+        self,
+        access_token: str,
+        user_id: int,
+        new_password: str
+    ) -> dict:
+        """Change user password"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.put(
+                f"{self.base_url}/admin/users/{user_id}/password",
+                headers=headers,
+                json={"new_password": new_password}
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_proxy_status(self, access_token: str) -> dict:
+        """Get proxy server statuses"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.get(
+                f"{self.base_url}/admin/proxies/status",
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_certificates_list(self, access_token: str) -> list:
+        """Get all client certificates"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.get(
+                f"{self.base_url}/admin/certificates/list",
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_expiring_certificates(self, access_token: str, days: int = 30) -> list:
+        """Get expiring certificates"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.get(
+                f"{self.base_url}/admin/certificates/expiring",
+                headers=headers,
+                params={"days": days}
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def run_data_cleanup(self, access_token: str, retention_days: int = 180) -> dict:
+        """Run data retention cleanup"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/admin/data-retention/cleanup",
+                headers=headers,
+                params={"retention_days": retention_days}
+            )
+            response.raise_for_status()
+            return response.json()
+
 # Global API client
 api_client = MainServerClient()
 
@@ -343,9 +447,9 @@ async def require_auth(request: Request) -> dict:
     return user
 
 async def require_admin(request: Request) -> dict:
-    """Require admin user"""
+    """Require admin or user_manager user"""
     user = await require_auth(request)
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "user_manager"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
@@ -362,7 +466,7 @@ async def index(request: Request):
     user = await get_current_user(request)
     if user:
         # Redirect to dashboard if authenticated
-        if user.get("role") == "admin":
+        if user.get("role") in ["admin", "user_manager"]:
             return RedirectResponse(url="/admin/dashboard", status_code=302)
         return RedirectResponse(url="/dashboard", status_code=302)
     
@@ -405,7 +509,7 @@ async def login(
         logger.info(f"User logged in: {email}")
         
         # Redirect to appropriate dashboard
-        if result["user"].get("role") == "admin":
+        if result["user"].get("role") in ["admin", "user_manager"]:
             return RedirectResponse(url="/admin/dashboard", status_code=302)
         return RedirectResponse(url="/dashboard", status_code=302)
         
@@ -556,17 +660,55 @@ async def admin_create_user(
         request.session["error"] = f"Failed to create user: {str(e)}"
         return RedirectResponse(url="/admin/users", status_code=302)
 
+@app.post("/admin/users/{user_id}/role")
+async def admin_update_user_role(
+    user_id: int,
+    request: Request,
+    role: str = Form(...),
+    user: dict = Depends(require_admin)
+):
+    """Update user role"""
+    try:
+        access_token = request.session.get("access_token")
+        await api_client.update_user_role(access_token, user_id, role)
+        
+        logger.info(f"User role updated for ID {user_id} to {role} by {user['email']}")
+        request.session["success"] = "User role updated successfully"
+        return RedirectResponse(url="/admin/users", status_code=302)
+        
+    except httpx.HTTPStatusError as e:
+        error_msg = e.response.json().get("detail", str(e))
+        logger.error(f"Update user role HTTP error: {error_msg}")
+        request.session["error"] = f"Failed to update user role: {error_msg}"
+        return RedirectResponse(url="/admin/users", status_code=302)
+    except Exception as e:
+        logger.error(f"Update user role error: {e}")
+        request.session["error"] = f"Failed to update user role: {str(e)}"
+        return RedirectResponse(url="/admin/users", status_code=302)
+
 @app.get("/admin/certificates", response_class=HTMLResponse)
 async def admin_certificates(request: Request, user: dict = Depends(require_admin)):
     """Admin certificate management"""
     success = request.session.pop("success", None)
     error = request.session.pop("error", None)
     
+    # Load certificate list and expiring certs
+    access_token = request.session.get("access_token")
+    certificates = []
+    expiring = []
+    try:
+        certificates = await api_client.get_certificates_list(access_token)
+        expiring = await api_client.get_expiring_certificates(access_token)
+    except Exception as e:
+        logger.warning(f"Could not load certificates: {e}")
+    
     return templates.TemplateResponse(
         "admin/certificates.html",
         {
             "request": request,
             "user": user,
+            "certificates": certificates,
+            "expiring": expiring,
             "success": success,
             "error": error,
         }
@@ -654,6 +796,104 @@ async def admin_messages(
         logger.error(f"Admin messages error: {e}")
         request.session["error"] = "Failed to load messages"
         return RedirectResponse(url="/admin/dashboard", status_code=302)
+
+# ============================================================================
+# Routes - Admin User Status & Password
+# ============================================================================
+
+@app.post("/admin/users/{user_id}/status")
+async def admin_toggle_user_status(
+    user_id: int,
+    request: Request,
+    is_active: str = Form(...),
+    user: dict = Depends(require_admin)
+):
+    """Toggle user active status"""
+    try:
+        access_token = request.session.get("access_token")
+        active = is_active.lower() == "true"
+        await api_client.toggle_user_status(access_token, user_id, active)
+        action = "activated" if active else "deactivated"
+        logger.info(f"User {user_id} {action} by {user['email']}")
+        request.session["success"] = f"User {action} successfully"
+        return RedirectResponse(url="/admin/users", status_code=302)
+    except Exception as e:
+        logger.error(f"Toggle user status error: {e}")
+        request.session["error"] = f"Failed to update user status: {str(e)}"
+        return RedirectResponse(url="/admin/users", status_code=302)
+
+@app.post("/admin/users/{user_id}/password")
+async def admin_change_user_password(
+    user_id: int,
+    request: Request,
+    new_password: str = Form(...),
+    user: dict = Depends(require_admin)
+):
+    """Change user password"""
+    try:
+        access_token = request.session.get("access_token")
+        await api_client.change_user_password(access_token, user_id, new_password)
+        logger.info(f"Password changed for user {user_id} by {user['email']}")
+        request.session["success"] = "Password changed successfully"
+        return RedirectResponse(url="/admin/users", status_code=302)
+    except Exception as e:
+        logger.error(f"Change password error: {e}")
+        request.session["error"] = f"Failed to change password: {str(e)}"
+        return RedirectResponse(url="/admin/users", status_code=302)
+
+# ============================================================================
+# Routes - Proxy Status
+# ============================================================================
+
+@app.get("/admin/proxies", response_class=HTMLResponse)
+async def admin_proxies(request: Request, user: dict = Depends(require_admin)):
+    """Proxy status monitoring page"""
+    try:
+        access_token = request.session.get("access_token")
+        proxy_data = await api_client.get_proxy_status(access_token)
+        return templates.TemplateResponse(
+            "admin/proxies.html",
+            {"request": request, "user": user,
+             "proxies": proxy_data.get("proxies", [])}
+        )
+    except Exception as e:
+        logger.error(f"Proxy status error: {e}")
+        request.session["error"] = "Failed to load proxy status"
+        return RedirectResponse(url="/admin/dashboard", status_code=302)
+
+# ============================================================================
+# Routes - Data Retention
+# ============================================================================
+
+@app.get("/admin/data-retention", response_class=HTMLResponse)
+async def admin_data_retention(request: Request, user: dict = Depends(require_admin)):
+    """Data retention management page"""
+    success = request.session.pop("success", None)
+    error = request.session.pop("error", None)
+    return templates.TemplateResponse(
+        "admin/data_retention.html",
+        {"request": request, "user": user,
+         "success": success, "error": error}
+    )
+
+@app.post("/admin/data-retention/cleanup")
+async def admin_run_cleanup(
+    request: Request,
+    retention_days: int = Form(180),
+    user: dict = Depends(require_admin)
+):
+    """Run data cleanup"""
+    try:
+        access_token = request.session.get("access_token")
+        result = await api_client.run_data_cleanup(access_token, retention_days)
+        deleted = result.get("deleted_count", 0)
+        logger.info(f"Data cleanup: {deleted} messages deleted by {user['email']}")
+        request.session["success"] = f"Cleanup complete: {deleted} messages deleted (older than {retention_days} days)"
+        return RedirectResponse(url="/admin/data-retention", status_code=302)
+    except Exception as e:
+        logger.error(f"Data cleanup error: {e}")
+        request.session["error"] = f"Cleanup failed: {str(e)}"
+        return RedirectResponse(url="/admin/data-retention", status_code=302)
 
 # ============================================================================
 # Health Check

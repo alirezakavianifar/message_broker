@@ -64,7 +64,7 @@
                         </div>
                         <div class="col-sm-6">
                             <label class="text-muted small">Last Login</label>
-                            <p class="mb-0 fw-semibold">{{ profile.last_login_at | datetimeformat if profile.last_login_at else 'Never' }}</p>
+                            <p class="mb-0 fw-semibold">{{ profile.last_login | datetimeformat if profile.last_login else 'Never' }}</p>
                         </div>
                     </div>
                 </div>

@@ -41,7 +41,7 @@ DATABASE_URL = os.getenv(
     "mysql+pymysql://systemuser:StrongPass123!@localhost/message_system"
 )
 
-ENCRYPTION_KEY_PATH = os.getenv("ENCRYPTION_KEY_PATH", "secrets/encryption.key")
+ENCRYPTION_KEY_PATH = os.getenv("ENCRYPTION_KEY_PATH", str(Path(__file__).parent / "secrets" / "encryption.key"))
 HASH_SALT = os.getenv("HASH_SALT", "message_broker_salt_change_in_production")
 
 # ============================================================================
@@ -103,7 +103,7 @@ def cmd_user_list(args):
                 user.role.value,
                 "[OK]" if user.is_active else "[X]",
                 user.created_at.strftime("%Y-%m-%d %H:%M"),
-                user.last_login_at.strftime("%Y-%m-%d %H:%M") if user.last_login_at else "Never",
+                user.last_login.strftime("%Y-%m-%d %H:%M") if user.last_login else "Never",
             ])
         
         headers = ["ID", "Email", "Role", "Active", "Created", "Last Login"]
@@ -222,6 +222,37 @@ def cmd_user_password(args):
         db.commit()
         
         print(f"[OK] Password changed for {user.email}")
+
+def cmd_user_role(args):
+    """Change user role"""
+    init_db()
+    
+    user_id = args.user_id
+    role = args.role.lower()
+    
+    try:
+        role_enum = UserRole(role)
+    except ValueError:
+        print(f"[X] Invalid role: {role}. Must be 'user' or 'admin'")
+        return
+    
+    with get_db() as db:
+        user = db.query(User).filter(User.id == user_id).first()
+        
+        if not user:
+            print(f"[X] User not found: {user_id}")
+            return
+        
+        if user.role == role_enum:
+            print(f"[!] User {user.email} already has role {role}")
+            return
+            
+        old_role = user.role.value
+        user.role = role_enum
+        db.commit()
+        
+        print(f"[OK] Role changed for {user.email}: {old_role} -> {user.role.value}")
+
 
 # ============================================================================
 # Certificate Management Commands
@@ -464,6 +495,12 @@ def main():
     user_password_parser = user_subparsers.add_parser("password", help="Change user password")
     user_password_parser.add_argument("user_id", type=int, help="User ID")
     user_password_parser.add_argument("--password", help="New password (prompt if not provided)")
+
+    
+    user_role_parser = user_subparsers.add_parser("role", help="Change user role")
+    user_role_parser.add_argument("user_id", type=int, help="User ID")
+    user_role_parser.add_argument("role", choices=["user", "admin"], help="New role")
+
     
     # Certificate commands
     cert_parser = subparsers.add_parser("cert", help="Certificate management")
@@ -510,7 +547,10 @@ def main():
                 cmd_user_delete(args)
             elif args.subcommand == "password":
                 cmd_user_password(args)
+            elif args.subcommand == "role":
+                cmd_user_role(args)
             else:
+
                 user_parser.print_help()
         
         elif args.command == "cert":

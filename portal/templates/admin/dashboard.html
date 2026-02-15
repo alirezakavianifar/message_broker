@@ -13,7 +13,7 @@
             <p class="text-muted">System statistics and overview</p>
         </div>
     </div>
-    
+
     <!-- Stats Cards -->
     <div class="row g-3 mb-4">
         <!-- Total Messages -->
@@ -32,7 +32,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Total Clients -->
         <div class="col-md-6 col-lg-3">
             <div class="card stat-card border-start border-info border-4">
@@ -49,7 +49,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Active Clients -->
         <div class="col-md-6 col-lg-3">
             <div class="card stat-card border-start border-success border-4">
@@ -60,13 +60,14 @@
                             <p class="stat-number text-success">{{ "{:,}".format(stats.active_clients) }}</p>
                         </div>
                         <div class="col-auto">
-                            <i class="bi bi-check-circle-fill text-success" style="font-size: 2.5rem; opacity: 0.3;"></i>
+                            <i class="bi bi-check-circle-fill text-success"
+                                style="font-size: 2.5rem; opacity: 0.3;"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <!-- Revoked Clients -->
         <div class="col-md-6 col-lg-3">
             <div class="card stat-card border-start border-danger border-4">
@@ -84,7 +85,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Message Status Breakdown -->
     <div class="row">
         <div class="col-lg-6 mb-4">
@@ -132,7 +133,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Recent Activity -->
         <div class="col-lg-6 mb-4">
             <div class="card">
@@ -146,28 +147,44 @@
                             <strong>{{ "{:,}".format(stats.messages_last_24h) }}</strong>
                         </div>
                         <div class="progress" style="height: 20px;">
-                            {% set pct_24h = (stats.messages_last_24h / stats.total_messages * 100) if stats.total_messages > 0 else 0 %}
+                            {% set pct_24h = (stats.messages_last_24h / stats.total_messages * 100) if
+                            stats.total_messages > 0 else 0 %}
                             <div class="progress-bar bg-primary" style="width: {{ pct_24h }}%">
                                 {{ "%.1f"|format(pct_24h) }}%
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <div class="d-flex justify-content-between mb-2">
                             <span class="text-muted">Messages (Last 7 days)</span>
                             <strong>{{ "{:,}".format(stats.messages_last_7d) }}</strong>
                         </div>
                         <div class="progress" style="height: 20px;">
-                            {% set pct_7d = (stats.messages_last_7d / stats.total_messages * 100) if stats.total_messages > 0 else 0 %}
+                            {% set pct_7d = (stats.messages_last_7d / stats.total_messages * 100) if
+                            stats.total_messages > 0 else 0 %}
                             <div class="progress-bar bg-info" style="width: {{ pct_7d }}%">
                                 {{ "%.1f"|format(pct_7d) }}%
                             </div>
                         </div>
                     </div>
-                    
+
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Messages (Last 30 days)</span>
+                            <strong>{{ "{:,}".format(stats.messages_last_30d | default(0)) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            {% set pct_30d = (stats.messages_last_30d / stats.total_messages * 100) if
+                            stats.total_messages > 0 and stats.messages_last_30d else 0 %}
+                            <div class="progress-bar bg-success" style="width: {{ pct_30d }}%">
+                                {{ "%.1f"|format(pct_30d) }}%
+                            </div>
+                        </div>
+                    </div>
+
                     <hr>
-                    
+
                     <div class="text-center mt-3">
                         <small class="text-muted">
                             <i class="bi bi-info-circle"></i>
@@ -178,7 +195,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Quick Actions -->
     <div class="row">
         <div class="col-12">
@@ -188,28 +205,40 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <a href="/admin/users" class="btn btn-outline-primary w-100 py-3">
                                 <i class="bi bi-people"></i><br>
-                                Manage Users
+                                Users
                             </a>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <a href="/admin/certificates" class="btn btn-outline-success w-100 py-3">
                                 <i class="bi bi-shield-check"></i><br>
                                 Certificates
                             </a>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <a href="/admin/messages" class="btn btn-outline-info w-100 py-3">
                                 <i class="bi bi-envelope"></i><br>
-                                View Messages
+                                Messages
                             </a>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
+                            <a href="/admin/proxies" class="btn btn-outline-warning w-100 py-3">
+                                <i class="bi bi-hdd-network"></i><br>
+                                Proxy Status
+                            </a>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="/admin/data-retention" class="btn btn-outline-danger w-100 py-3">
+                                <i class="bi bi-clock-history"></i><br>
+                                Data Retention
+                            </a>
+                        </div>
+                        <div class="col-md-2">
                             <a href="/dashboard" class="btn btn-outline-secondary w-100 py-3">
                                 <i class="bi bi-speedometer2"></i><br>
-                                User Dashboard
+                                Dashboard
                             </a>
                         </div>
                     </div>
@@ -219,4 +248,3 @@
     </div>
 </div>
 {% endblock %}
-

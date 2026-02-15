@@ -38,6 +38,7 @@ class UserRole(str, PyEnum):
     """User role enumeration."""
     USER = "user"
     ADMIN = "admin"
+    USER_MANAGER = "user_manager"
 
 
 class ClientStatus(str, PyEnum):

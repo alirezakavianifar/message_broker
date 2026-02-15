@@ -37,6 +37,7 @@ from sqlalchemy import func, desc, text
 import jwt
 from passlib.context import CryptContext
 import redis
+import httpx
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -193,7 +194,7 @@ def decode_access_token(token: str) -> Optional[dict]:
     except jwt.ExpiredSignatureError:
         logger.warning("Token expired")
         return None
-    except jwt.JWTError as e:
+    except jwt.PyJWTError as e:
         logger.warning(f"JWT error: {e}")
         return None
 
@@ -456,6 +457,15 @@ async def require_admin(current_user: User = Depends(get_current_user)) -> User:
         )
     return current_user
 
+async def require_admin_or_user_manager(current_user: User = Depends(get_current_user)) -> User:
+    """Require admin or user_manager role"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.USER_MANAGER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or user manager access required"
+        )
+    return current_user
+
 # ============================================================================
 # Request/Response Models
 # ============================================================================
@@ -468,6 +478,8 @@ class RegisterMessageRequest(BaseModel):
     sender_number: str = Field(..., description="Sender phone number (E.164)")
     message_body: str = Field(..., min_length=1, max_length=1000, description="Message content")
     queued_at: datetime = Field(..., description="Time message was queued")
+    domain: Optional[str] = Field("default", description="Message domain")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
 
 class DeliverMessageRequest(BaseModel):
     """Request to mark message as delivered"""
@@ -545,6 +557,19 @@ class CreateUserRequest(BaseModel):
     role: str = Field("user", description="User role (user/admin)")
     client_id: Optional[str] = Field(None, description="Associated client ID for regular users")
 
+class UpdateUserRoleRequest(BaseModel):
+    """Request to update user role"""
+    role: str = Field(..., description="New user role (user/admin/user_manager)")
+
+class UpdateUserStatusRequest(BaseModel):
+    """Request to update user active status"""
+    is_active: bool = Field(..., description="Whether user is active")
+
+class UpdateUserPasswordRequest(BaseModel):
+    """Request to change user password"""
+    new_password: str = Field(..., min_length=8, description="New password")
+
+
 class StatsResponse(BaseModel):
     """System statistics"""
     total_messages: int
@@ -554,6 +579,7 @@ class StatsResponse(BaseModel):
     revoked_clients: int
     messages_last_24h: int
     messages_last_7d: int
+    messages_last_30d: int = 0
 
 # ============================================================================
 # Internal API (Mutual TLS Required)
@@ -795,7 +821,7 @@ async def portal_login(
         )
         
         # Update last login
-        user.last_login_at = datetime.utcnow()
+        user.last_login = datetime.utcnow()
         db.commit()
         
         # Audit log
@@ -1103,14 +1129,12 @@ async def create_user(
         # Create user
         # Map role string to enum (handle case-insensitive input)
         role_str = request.role.lower().strip()
-        if role_str == "admin":
-            user_role = UserRole.ADMIN
-        elif role_str == "user":
-            user_role = UserRole.USER
-        else:
+        role_map = {"admin": UserRole.ADMIN, "user": UserRole.USER, "user_manager": UserRole.USER_MANAGER}
+        user_role = role_map.get(role_str)
+        if not user_role:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid role: {request.role}. Must be 'user' or 'admin'"
+                detail=f"Invalid role: {request.role}. Must be 'user', 'admin', or 'user_manager'"
             )
         
         user = User(
@@ -1147,6 +1171,69 @@ async def create_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"User creation failed: {str(e)}"
         )
+
+@app.put("/admin/users/{user_id}/role", response_model=UserResponse, tags=["Admin"])
+async def update_user_role(
+    user_id: int,
+    request: UpdateUserRoleRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update user role (admin only)"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Map role string to enum
+        role_str = request.role.lower().strip()
+        role_map = {"admin": UserRole.ADMIN, "user": UserRole.USER, "user_manager": UserRole.USER_MANAGER}
+        user_role = role_map.get(role_str)
+        if not user_role:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid role: {request.role}. Must be 'user', 'admin', or 'user_manager'"
+            )
+        
+        if user.role == user_role:
+            return UserResponse.from_orm(user)
+            
+        old_role = user.role.value
+        user.role = user_role
+        db.commit()
+        db.refresh(user)
+        
+        # Audit log
+        audit = AuditLog(
+            event_type="user_role_updated",
+            user_id=current_user.id,
+            event_data={
+                "target_user_id": user_id,
+                "target_email": user.email,
+                "old_role": old_role,
+                "new_role": user_role.value
+            }
+        )
+        db.add(audit)
+        db.commit()
+        
+        logger.info(f"User role updated for {user.email}: {old_role} -> {user_role.value} by {current_user.email}")
+        
+        return UserResponse.from_orm(user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update user role: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"User role update failed: {str(e)}"
+        )
+
 
 @app.get("/admin/users", response_model=List[UserResponse], tags=["Admin"])
 async def list_users(
@@ -1203,6 +1290,12 @@ async def get_stats(
             Message.created_at >= week_ago
         ).scalar()
         
+        # Messages last 30 days
+        month_ago = datetime.utcnow() - timedelta(days=30)
+        messages_last_30d = db.query(func.count(Message.id)).filter(
+            Message.created_at >= month_ago
+        ).scalar()
+        
         return StatsResponse(
             total_messages=total_messages or 0,
             messages_by_status=messages_by_status,
@@ -1211,6 +1304,7 @@ async def get_stats(
             revoked_clients=revoked_clients or 0,
             messages_last_24h=messages_last_24h or 0,
             messages_last_7d=messages_last_7d or 0,
+            messages_last_30d=messages_last_30d or 0,
         )
         
     except Exception as e:
@@ -1219,6 +1313,188 @@ async def get_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve statistics"
         )
+
+# ============================================================================
+# User Status & Password (Admin/User Manager)
+# ============================================================================
+
+@app.put("/admin/users/{user_id}/status", response_model=UserResponse, tags=["Admin"])
+async def update_user_status(
+    user_id: int,
+    request: UpdateUserStatusRequest,
+    current_user: User = Depends(require_admin_or_user_manager),
+    db: Session = Depends(get_db),
+):
+    """Activate or deactivate a user"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        if user.id == current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot change your own active status"
+            )
+        old_status = user.is_active
+        user.is_active = request.is_active
+        db.commit()
+        db.refresh(user)
+        audit = AuditLog(
+            event_type="user_status_updated",
+            user_id=current_user.id,
+            event_data={"target_user_id": user_id, "target_email": user.email,
+                        "old_status": old_status, "new_status": request.is_active}
+        )
+        db.add(audit)
+        db.commit()
+        action = "activated" if request.is_active else "deactivated"
+        logger.info(f"User {action}: {user.email} by {current_user.email}")
+        return UserResponse.from_orm(user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update user status: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"User status update failed: {str(e)}")
+
+
+@app.put("/admin/users/{user_id}/password", tags=["Admin"])
+async def update_user_password(
+    user_id: int,
+    request: UpdateUserPasswordRequest,
+    current_user: User = Depends(require_admin_or_user_manager),
+    db: Session = Depends(get_db),
+):
+    """Change user password"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.password_hash = get_password_hash(request.new_password)
+        db.commit()
+        audit = AuditLog(
+            event_type="user_password_changed",
+            user_id=current_user.id,
+            event_data={"target_user_id": user_id, "target_email": user.email}
+        )
+        db.add(audit)
+        db.commit()
+        logger.info(f"Password changed for {user.email} by {current_user.email}")
+        return {"status": "success", "message": f"Password updated for {user.email}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to change password: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Password change failed: {str(e)}")
+
+
+# ============================================================================
+# Proxy Status Monitoring
+# ============================================================================
+
+@app.get("/admin/proxies/status", tags=["Admin"])
+async def get_proxy_statuses(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Get status of all configured proxy servers"""
+    proxy_urls_str = os.getenv("PROXY_URLS", os.getenv("PROXY_URL", "https://localhost:8001"))
+    proxy_urls = [u.strip() for u in proxy_urls_str.split(",") if u.strip()]
+    results = []
+    for proxy_url in proxy_urls:
+        health_url = f"{proxy_url}/api/v1/health"
+        try:
+            async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(5.0)) as client:
+                response = await client.get(health_url)
+                if response.status_code == 200:
+                    results.append({"url": proxy_url, "status": "online",
+                                    "health": response.json(),
+                                    "checked_at": datetime.utcnow().isoformat()})
+                else:
+                    results.append({"url": proxy_url, "status": "unhealthy",
+                                    "error": f"HTTP {response.status_code}",
+                                    "checked_at": datetime.utcnow().isoformat()})
+        except Exception as e:
+            results.append({"url": proxy_url, "status": "offline",
+                            "error": str(e),
+                            "checked_at": datetime.utcnow().isoformat()})
+    return {"proxies": results}
+
+
+# ============================================================================
+# Certificate Listing & Expiry
+# ============================================================================
+
+@app.get("/admin/certificates/list", tags=["Admin"])
+async def list_certificates(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """List all client certificates"""
+    clients = db.query(Client).order_by(Client.expires_at.asc()).all()
+    return [{"client_id": c.client_id, "domain": c.domain, "status": c.status.value,
+             "issued_at": c.issued_at.isoformat(), "expires_at": c.expires_at.isoformat(),
+             "revoked_at": c.revoked_at.isoformat() if c.revoked_at else None,
+             "is_valid": c.is_valid()} for c in clients]
+
+
+@app.get("/admin/certificates/expiring", tags=["Admin"])
+async def get_expiring_certificates(
+    days: int = 30,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Get certificates expiring within N days"""
+    cutoff_date = datetime.utcnow() + timedelta(days=days)
+    expiring = db.query(Client).filter(
+        Client.status == ClientStatus.ACTIVE,
+        Client.expires_at <= cutoff_date,
+        Client.expires_at > datetime.utcnow()
+    ).order_by(Client.expires_at.asc()).all()
+    return [{"client_id": c.client_id, "domain": c.domain,
+             "expires_at": c.expires_at.isoformat(),
+             "days_remaining": (c.expires_at - datetime.utcnow()).days} for c in expiring]
+
+
+# ============================================================================
+# Data Retention
+# ============================================================================
+
+@app.post("/admin/data-retention/cleanup", tags=["Admin"])
+async def run_data_cleanup(
+    retention_days: int = 180,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete delivered/failed messages older than retention_days"""
+    try:
+        cutoff_date = datetime.utcnow() - timedelta(days=retention_days)
+        deleted_count = db.query(Message).filter(
+            (Message.delivered_at < cutoff_date) |
+            ((Message.status == MessageStatus.FAILED) & (Message.created_at < cutoff_date))
+        ).delete(synchronize_session=False)
+        db.commit()
+        audit = AuditLog(
+            event_type="data_cleanup",
+            user_id=current_user.id,
+            event_data={"retention_days": retention_days,
+                        "deleted_count": deleted_count,
+                        "cutoff_date": cutoff_date.isoformat()}
+        )
+        db.add(audit)
+        db.commit()
+        logger.info(f"Data cleanup: {deleted_count} messages deleted (>{retention_days} days) by {current_user.email}")
+        return {"status": "success", "deleted_count": deleted_count,
+                "retention_days": retention_days, "cutoff_date": cutoff_date.isoformat()}
+    except Exception as e:
+        logger.error(f"Data cleanup failed: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Data cleanup failed: {str(e)}")
+
 
 # ============================================================================
 # Health & Monitoring

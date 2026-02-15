@@ -534,7 +534,9 @@ async def submit_message(
             "client_id": client_id,
             "sender_number": message.sender_number,
             "message_body": message.message_body,
-            "queued_at": queued_at.isoformat() + "Z"
+            "queued_at": queued_at.isoformat() + "Z",
+            "domain": message.metadata.domain or "default",
+            "metadata": message.metadata.dict() if message.metadata else {}
         }
         
         registered = await main_server_client.register_message(registration_data)

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Proxy Status - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <h1 class="mt-4">
+        <i class="bi bi-hdd-network"></i> Proxy Status Monitoring
+    </h1>
+    <p class="text-muted">Real-time status of all configured proxy servers</p>
+
+    <div class="row mt-4">
+        {% for proxy in proxies %}
+        <div class="col-lg-6 mb-4">
+            <div
+                class="card h-100 {% if proxy.status == 'online' %}border-success{% elif proxy.status == 'unhealthy' %}border-warning{% else %}border-danger{% endif %}">
+                <div class="card-header d-flex justify-content-between align-items-center
+                    {% if proxy.status == 'online' %}bg-success text-white
+                    {% elif proxy.status == 'unhealthy' %}bg-warning text-dark
+                    {% else %}bg-danger text-white{% endif %}">
+                    <span>
+                        <i
+                            class="bi {% if proxy.status == 'online' %}bi-check-circle-fill{% elif proxy.status == 'unhealthy' %}bi-exclamation-triangle-fill{% else %}bi-x-circle-fill{% endif %}"></i>
+                        {{ proxy.url }}
+                    </span>
+                    <span
+                        class="badge {% if proxy.status == 'online' %}bg-light text-success{% elif proxy.status == 'unhealthy' %}bg-light text-warning{% else %}bg-light text-danger{% endif %}">
+                        {{ proxy.status | upper }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    {% if proxy.status == 'online' and proxy.health %}
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <th>Version</th>
+                            <td>{{ proxy.health.version | default('N/A') }}</td>
+                        </tr>
+                        <tr>
+                            <th>Overall Status</th>
+                            <td>
+                                {% if proxy.health.status == 'healthy' %}
+                                <span class="badge bg-success">Healthy</span>
+                                {% else %}
+                                <span class="badge bg-warning">{{ proxy.health.status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if proxy.health.checks %}
+                        {% for check_name, check_status in proxy.health.checks.items() %}
+                        <tr>
+                            <th>{{ check_name | capitalize }}</th>
+                            <td>
+                                {% if check_status == 'healthy' or check_status == 'valid' %}
+                                <span class="badge bg-success">{{ check_status }}</span>
+                                {% elif check_status == 'unknown' %}
+                                <span class="badge bg-secondary">{{ check_status }}</span>
+                                {% else %}
+                                <span class="badge bg-danger">{{ check_status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% endif %}
+                        {% if proxy.health.uptime_seconds %}
+                        <tr>
+                            <th>Uptime</th>
+                            <td>{{ proxy.health.uptime_seconds }} seconds</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                    {% elif proxy.error %}
+                    <div class="alert alert-danger mb-0">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Error:</strong> {{ proxy.error }}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer text-muted small">
+                    <i class="bi bi-clock"></i> Checked: {{ proxy.checked_at | datetimeformat }}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> No proxy servers configured.
+                Set the <code>PROXY_URLS</code> environment variable (comma-separated) to monitor proxies.
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="mt-3">
+        <a href="/admin/proxies" class="btn btn-outline-primary">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </a>
+        <a href="/admin/dashboard" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}
