@@ -1,19 +1,19 @@
 [Unit]
 Description=Message Broker Proxy Server
-After=network.target redis.service mysql.service
+After=network.target redis.service
 Wants=redis.service
 
 [Service]
 Type=simple
 User=messagebroker
 Group=messagebroker
-WorkingDirectory=/opt/message_broker/proxy
-Environment="PATH=/opt/message_broker/venv/bin"
-EnvironmentFile=-/opt/message_broker/.env
-Environment="PYTHONPATH=/opt/message_broker"
+WorkingDirectory=/opt/message_broker_proxy/proxy
+Environment="PATH=/opt/message_broker_proxy/venv/bin"
+EnvironmentFile=-/opt/message_broker_proxy/.env
+Environment="PYTHONPATH=/opt/message_broker_proxy"
 
 # Start command
-ExecStart=/opt/message_broker/venv/bin/uvicorn app:app \
+ExecStart=/opt/message_broker_proxy/venv/bin/uvicorn app:app \
     --host 0.0.0.0 \
     --port 8001 \
     --ssl-keyfile certs/proxy.key \
@@ -33,7 +33,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/message_broker/proxy/logs
+ReadWritePaths=/opt/message_broker_proxy/proxy/logs
 
 # Resource limits
 LimitNOFILE=65536

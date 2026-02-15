@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 """
-Example client script for sending messages to the proxy server.
+Message Broker Client - Python Convenience Script (Optional)
+
+This script is a convenience wrapper around HTTP requests. You don't need Python
+to send messages - you can use curl, Postman, or any HTTP client!
+
+The Message Broker uses a thin client architecture:
+- No Python required - use any HTTP client
+- No virtual environments needed on client machines
+- Just send HTTP POST requests with mutual TLS certificates
+
+See README.md for examples using curl, PowerShell, JavaScript, Go, etc.
+
 Usage: python send_message.py --sender "+1234567890" --message "Your message here"
 """
 

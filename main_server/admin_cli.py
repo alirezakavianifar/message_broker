@@ -139,6 +139,14 @@ def cmd_user_create(args):
             print(f"[X] User with email {email} already exists")
             return
         
+        # Validate client_id if provided
+        client_id = getattr(args, 'client_id', None)
+        if client_id:
+            client = db.query(Client).filter(Client.client_id == client_id).first()
+            if not client:
+                print(f"[X] Client not found: {client_id}")
+                return
+        
         # Create user
         # Use UserRole enum
         role_enum = getattr(UserRole, role.upper())  # UserRole.ADMIN or UserRole.USER
@@ -146,6 +154,7 @@ def cmd_user_create(args):
             email=email,
             password_hash=pwd_context.hash(password),
             role=role_enum,
+            client_id=client_id,
             is_active=True,
         )
         
@@ -153,7 +162,8 @@ def cmd_user_create(args):
         db.commit()
         db.refresh(user)
         
-        print(f"[OK] User created: {user.email} (ID: {user.id}, Role: {role})")
+        client_info = f", Client: {client_id}" if client_id else ""
+        print(f"[OK] User created: {user.email} (ID: {user.id}, Role: {role}{client_info})")
 
 def cmd_user_delete(args):
     """Delete a user"""
@@ -445,6 +455,7 @@ def main():
     user_create_parser.add_argument("email", help="User email")
     user_create_parser.add_argument("--role", choices=["user", "admin"], default="user", help="User role")
     user_create_parser.add_argument("--password", help="User password (prompt if not provided)")
+    user_create_parser.add_argument("--client-id", help="Associated client ID for regular users")
     
     user_delete_parser = user_subparsers.add_parser("delete", help="Delete user")
     user_delete_parser.add_argument("user_id", type=int, help="User ID")

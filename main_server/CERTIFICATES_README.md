@@ -527,29 +527,54 @@ Message Broker Client Certificate Installation
 
 2. Update your application configuration:
    
-   Python (httpx):
+   Using curl (No Python required):
+   ```bash
+   curl -X POST https://proxy.example.com:8001/api/v1/messages \
+     --cert client_001.crt \
+     --key client_001.key \
+     --cacert ca.crt \
+     -H "Content-Type: application/json" \
+     -d '{
+       "sender_number": "+1234567890",
+       "message_body": "Your message here"
+     }'
+   ```
+   
+   Python (httpx) - Optional:
    ```python
    cert = ("client_001.crt", "client_001.key")
    verify = "ca.crt"
    
    response = httpx.post(
        "https://proxy.example.com:8001/api/v1/messages",
-       json=message_data,
+       json={
+           "sender_number": "+1234567890",
+           "message_body": "Your message here"
+       },
        cert=cert,
        verify=verify
    )
    ```
+   
+   Note: You can use any HTTP client (curl, Postman, JavaScript, Go, etc.).
+   Python is NOT required - it's just one option.
 
 3. Set file permissions (Linux/Mac):
    chmod 600 client_001.key
    chmod 644 client_001.crt ca.crt
 
 4. Test connection:
+   # Using curl:
+   curl --cert client_001.crt --key client_001.key --cacert ca.crt \
+     https://proxy.example.com:8001/health
+   
+   # Or using Python script (if available):
    python test_connection.py
 
 5. Backup certificates securely
 
 For support, contact: support@messagebroker.example.com
+See client-scripts/README.md for more examples
 ```
 
 ---

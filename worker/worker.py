@@ -219,18 +219,25 @@ class RedisQueueManager:
             logger.error(f"Failed to connect to Redis: {e}")
             raise
     
-    def pop_message(self, timeout: int = 5) -> Optional[Dict[str, Any]]:
+    async def pop_message(self, loop, timeout: int = 5) -> Optional[Dict[str, Any]]:
         """
-        Pop message from queue (blocking operation with timeout)
+        Pop message from queue (blocking operation in executor)
         
         Args:
+            loop: Asyncio event loop
             timeout: Timeout in seconds for BRPOP
             
         Returns:
             Message dictionary or None if timeout
         """
         try:
-            result = self.client.brpop(config.redis_queue, timeout=timeout)
+            # Run blocking brpop in executor to avoid blocking the event loop
+            result = await loop.run_in_executor(
+                None, 
+                self.client.brpop, 
+                config.redis_queue, 
+                timeout
+            )
             if result:
                 _, message_json = result
                 message = json.loads(message_json)
@@ -281,14 +288,22 @@ class MainServerClient:
         self.timeout = httpx.Timeout(30.0)
         self.client = None
     
-    def _get_client(self) -> httpx.AsyncClient:
+    async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client"""
         if self.client is None or self.client.is_closed:
-            self.client = httpx.AsyncClient(
-                cert=(config.worker_cert, config.worker_key),
-                verify=config.ca_cert,
-                timeout=self.timeout
-            )
+            verify_ssl = os.getenv("MAIN_SERVER_VERIFY_SSL", "true").lower() != "false"
+            
+            if not verify_ssl:
+                self.client = httpx.AsyncClient(
+                    verify=False,
+                    timeout=self.timeout
+                )
+            else:
+                self.client = httpx.AsyncClient(
+                    cert=(config.worker_cert, config.worker_key),
+                    verify=config.ca_cert,
+                    timeout=self.timeout
+                )
         return self.client
     
     async def deliver_message(self, message_data: Dict[str, Any]) -> bool:
@@ -309,7 +324,7 @@ class MainServerClient:
         }
         
         try:
-            client = self._get_client()
+            client = await self._get_client()
             response = await client.post(url, json=payload)
             response.raise_for_status()
             
@@ -362,7 +377,7 @@ class MainServerClient:
         }
         
         try:
-            client = self._get_client()
+            client = await self._get_client()
             response = await client.put(url, json=payload)
             response.raise_for_status()
             return True
@@ -531,10 +546,11 @@ class Worker:
         active_workers.inc()
         
         try:
+            loop = asyncio.get_running_loop()
             while self.running:
                 try:
-                    # Pop message from queue (blocking with timeout)
-                    message = redis_manager.pop_message(timeout=config.poll_interval)
+                    # Pop message from queue (non-blocking for loop)
+                    message = await redis_manager.pop_message(loop, timeout=config.poll_interval)
                     
                     if message is None:
                         # Timeout - no message available

@@ -660,6 +660,14 @@ Get-Content C:\MessageBroker\logs\main_server.log | Select-String "ERROR"
 
 ### Client Can't Send Messages
 
+**Note**: Clients can use **any HTTP client** - Python is NOT required. Recommend using curl (no dependencies):
+```bash
+curl -X POST https://your-server:8001/api/v1/messages \
+  --cert client.crt --key client.key --cacert ca.crt \
+  -H "Content-Type: application/json" \
+  -d '{"sender_number": "+1234567890", "message_body": "Test message"}'
+```
+
 **Check**:
 1. Certificate valid:
    ```powershell
@@ -676,6 +684,8 @@ Get-Content C:\MessageBroker\logs\main_server.log | Select-String "ERROR"
    ```powershell
    Get-Service MessageBrokerProxy
    ```
+
+4. If client has Python/dependency issues, direct them to use curl instead
 
 ### Messages Not Being Delivered
 

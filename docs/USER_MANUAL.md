@@ -100,69 +100,128 @@ Your dashboard shows:
 
 **Not yet implemented** - Messages must be sent via API
 
-### Via Python Client Script
+### Via HTTP API (Recommended - No Dependencies Required)
+
+The message broker uses a **thin client architecture**. You can send messages using **any HTTP client** - no Python or special libraries required!
 
 #### Prerequisites
 
-- Python 3.8 or higher
 - Client certificates (provided by administrator)
-- Client script (`send_message.py`)
+- Any HTTP client (curl, Postman, or any programming language)
 
-#### Setup
+#### Certificate Setup
 
-1. Install Python if not already installed
-2. Install required packages:
-   ```bash
-   pip install requests
-   ```
-
-3. Place certificates in a secure location:
-   - `client.crt` - Your certificate
-   - `client.key` - Your private key (**keep secure!**)
-   - `ca.crt` - CA certificate
+Place certificates in a secure location:
+- `client.crt` - Your certificate
+- `client.key` - Your private key (**keep secure!**)
+- `ca.crt` - CA certificate
 
 #### Sending a Message
 
-**Basic Usage**:
+**Using curl (Linux/Mac/WSL - Recommended for these platforms)**:
+
+```bash
+curl -X POST https://your-server:8001/api/v1/messages \
+  --cert client.crt \
+  --key client.key \
+  --cacert ca.crt \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sender_number": "+1234567890",
+    "message_body": "Hello, this is a test message"
+  }'
+```
+
+**Note**: On Windows, `curl.exe` uses Schannel which may have issues with PEM certificates. Windows users should use the PowerShell script (below) instead.
+
+**Using PowerShell Script (Windows - Recommended)**:
+
+```powershell
+# Use the provided PowerShell script (recommended for Windows)
+.\send_message.ps1 -Sender "+1234567890" -Message "Hello, this is a test message"
+```
+
+Or using PowerShell's Invoke-RestMethod (requires PFX certificate):
+
+```powershell
+$body = @{
+    sender_number = "+1234567890"
+    message_body = "Hello, this is a test message"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "https://your-server:8001/api/v1/messages" `
+  -Method Post `
+  -Certificate (Get-PfxCertificate -FilePath "client.pfx") `
+  -Body $body `
+  -ContentType "application/json"
+```
+
+**Using Python (Optional - Convenience Only)**:
 
 ```python
 import requests
-import json
 
-# Configuration
-proxy_url = "https://your-server:8001/api/v1/messages"
-cert_file = "path/to/client.crt"
-key_file = "path/to/client.key"
-ca_file = "path/to/ca.crt"
-
-# Message data
-message = {
-    "sender_number": "+1234567890",
-    "message_body": "Hello, this is a test message"
-}
-
-# Send message
 response = requests.post(
-    proxy_url,
-    json=message,
-    cert=(cert_file, key_file),
-    verify=ca_file
+    "https://your-server:8001/api/v1/messages",
+    json={
+        "sender_number": "+1234567890",
+        "message_body": "Hello, this is a test message"
+    },
+    cert=("client.crt", "client.key"),
+    verify="ca.crt"
 )
 
-# Check response
-if response.status_code == 200:
+if response.status_code == 202:
     result = response.json()
     print(f"Message sent! ID: {result['message_id']}")
-else:
-    print(f"Error: {response.status_code}")
-    print(response.text)
 ```
 
-**Using the Provided Script**:
+**Using JavaScript/Node.js**:
+
+```javascript
+const https = require('https');
+const fs = require('fs');
+
+const options = {
+  hostname: 'your-server',
+  port: 8001,
+  path: '/api/v1/messages',
+  method: 'POST',
+  cert: fs.readFileSync('client.crt'),
+  key: fs.readFileSync('client.key'),
+  ca: fs.readFileSync('ca.crt'),
+  headers: {
+    'Content-Type': 'application/json'
+  }
+};
+
+const data = JSON.stringify({
+  sender_number: '+1234567890',
+  message_body: 'Hello, this is a test message'
+});
+
+const req = https.request(options, (res) => {
+  let body = '';
+  res.on('data', (chunk) => { body += chunk; });
+  res.on('end', () => {
+    const result = JSON.parse(body);
+    console.log('Message sent! ID:', result.message_id);
+  });
+});
+
+req.write(data);
+req.end();
+```
+
+**Using the Provided Python Script (Optional Convenience Tool)**:
+
+If you prefer using Python, a convenience script is available in `client-scripts/send_message.py`:
 
 ```bash
-python send_message.py --sender "+1234567890" --message "Your message here" --cert client.crt --key client.key
+python send_message.py --sender "+1234567890" --message "Your message here" --cert client.crt --key client.key --ca ca.crt
 ```
+
+**Note**: The Python script is just a convenience wrapper around HTTP requests. You can use any HTTP client you prefer!
 
 #### Message Format
 
@@ -282,12 +341,13 @@ python send_message.py --sender "+1234567890" --message "Your message here" --ce
    openssl x509 -in client.crt -noout -dates
    ```
 3. Ensure certificates are in correct format (PEM)
-4. Contact administrator if certificate expired
+4. Verify certificate paths are correct in your HTTP client
+5. Contact administrator if certificate expired
 
 **Problem**: "Invalid sender number" error
 
 **Solutions**:
-1. Check number format: `+[country code][number]`
+1. Check number format: `+[country code][number]` (E.164 format)
 2. Remove any spaces or dashes
 3. Ensure starts with `+`
 4. Example correct format: `+1234567890`
@@ -295,10 +355,27 @@ python send_message.py --sender "+1234567890" --message "Your message here" --ce
 **Problem**: Connection refused
 
 **Solutions**:
-1. Check proxy URL is correct
-2. Verify network connectivity
-3. Check firewall not blocking connection
-4. Contact administrator
+1. Check proxy URL is correct: `https://your-server:8001/api/v1/messages`
+2. Verify network connectivity (try ping or telnet)
+3. Check firewall not blocking connection to port 8001
+4. Verify the proxy service is running
+5. Contact administrator
+
+**Problem**: "Python/pip not found" when trying to use Python script
+
+**Solutions**:
+1. **You don't need Python!** Use curl (Linux/Mac) or the PowerShell script (Windows) instead
+2. The Python script is optional - any HTTP client works
+3. If you prefer Python, install it from python.org
+4. Or use PowerShell, Node.js, or any other HTTP-capable tool
+
+**Problem**: Windows curl.exe certificate import errors
+
+**Solutions**:
+1. **Use the PowerShell script** (`send_message.ps1`) - This is the recommended approach for Windows
+2. Use Git Bash (if installed) which has OpenSSL-based curl
+3. Use WSL (Windows Subsystem for Linux) for OpenSSL-based curl
+4. The PowerShell script handles certificates correctly and works reliably on Windows
 
 ### Messages Stuck in "Pending"
 
@@ -378,8 +455,27 @@ Contact your administrator for a new certificate. They will:
 Yes! You can:
 - **Portal**: Login from any computer with your credentials
 - **API**: Copy your certificates to any computer (securely!)
+- **No special software needed**: Use curl, Postman, or any HTTP client on any platform
 
 **Security Note**: Keep your private key (client.key) secure! Don't share it or commit it to version control.
+
+### Do I need Python to send messages?
+
+**No!** Python is completely optional. You can use:
+- **curl** (Linux, macOS, WSL - uses OpenSSL, works perfectly)
+- **PowerShell script** (`send_message.ps1` - Windows, recommended)
+- **Postman** or Insomnia (GUI tools)
+- **Any programming language** with HTTP support (JavaScript, Go, Java, C#, etc.)
+
+The Python script (`send_message.py`) is just a convenience wrapper - it's not required.
+
+### Which method should I use on Windows?
+
+**Recommended**: Use the PowerShell script (`send_message.ps1`). 
+
+Windows `curl.exe` uses Schannel which may have issues with PEM certificates. The PowerShell script handles certificates correctly and is the most reliable option on Windows.
+
+For more platform-specific guidance, see `client-scripts/PLATFORM_NOTES.md`.
 
 ### How do I get support?
 
@@ -485,17 +581,23 @@ Contact your administrator:
 
 ### Sending Messages (API)
 
+**Using curl (Recommended - No dependencies)**:
+
+```bash
+curl -X POST https://server:8001/api/v1/messages \
+  --cert client.crt --key client.key --cacert ca.crt \
+  -H "Content-Type: application/json" \
+  -d '{"sender_number": "+1234567890", "message_body": "Your message"}'
+```
+
+**Using Python (Optional)**:
+
 ```python
 import requests
-
 response = requests.post(
     "https://server:8001/api/v1/messages",
-    json={
-        "sender_number": "+1234567890",
-        "message_body": "Your message"
-    },
-    cert=("client.crt", "client.key"),
-    verify="ca.crt"
+    json={"sender_number": "+1234567890", "message_body": "Your message"},
+    cert=("client.crt", "client.key"), verify="ca.crt"
 )
 ```
 

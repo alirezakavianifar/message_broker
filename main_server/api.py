@@ -543,6 +543,7 @@ class CreateUserRequest(BaseModel):
     email: str = Field(..., description="User email")
     password: str = Field(..., min_length=8, description="User password")
     role: str = Field("user", description="User role (user/admin)")
+    client_id: Optional[str] = Field(None, description="Associated client ID for regular users")
 
 class StatsResponse(BaseModel):
     """System statistics"""
@@ -879,9 +880,11 @@ async def get_portal_messages(
     # Filter by client for non-admin users
     if current_user.role != UserRole.ADMIN:
         # Users should only see messages for clients they're associated with
-        # For now, we'll restrict to empty result for non-admin
-        # In production, implement proper client-user association
-        query = query.filter(Message.client_id == f"user_{current_user.id}")
+        if current_user.client_id:
+            query = query.filter(Message.client_id == current_user.client_id)
+        else:
+            # Users without a client_id see no messages
+            query = query.filter(text("1 = 0"))  # Always returns empty result
     
     # Status filter
     if status_filter:
@@ -1088,6 +1091,15 @@ async def create_user(
                 detail="Email already registered"
             )
         
+        # Validate client_id if provided
+        if request.client_id:
+            client = db.query(Client).filter(Client.client_id == request.client_id).first()
+            if not client:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Client not found: {request.client_id}"
+                )
+        
         # Create user
         # Map role string to enum (handle case-insensitive input)
         role_str = request.role.lower().strip()
@@ -1105,6 +1117,7 @@ async def create_user(
             email=request.email,
             password_hash=get_password_hash(request.password),
             role=user_role,
+            client_id=request.client_id,
             is_active=True,
         )
         
@@ -1116,7 +1129,7 @@ async def create_user(
         audit = AuditLog(
             event_type="user_created",
             user_id=current_user.id,
-            event_data={"email": user.email, "role": request.role}
+            event_data={"email": user.email, "role": request.role, "client_id": request.client_id}
         )
         db.add(audit)
         db.commit()
