@@ -1,0 +1,35 @@
+================================================
+Message Broker Main Server - Starting
+================================================
+Activating virtual environment...
+Loading environment variables from .env...
+
+Configuration:
+  Database: mysql+pymysql://systemuser:StrongPass123!@localhost/message_system
+  Host: 0.0.0.0:8000
+  Log Level: INFO
+  Metrics: true
+  TLS: Disabled
+
+Checking database connection...
+WARNING: Cannot connect to database
+Please check database configuration and ensure MySQL is running
+
+Starting main server...
+API Documentation: http://localhost:8000/docs
+ReDoc: http://localhost:8000/redoc
+Health Check: http://localhost:8000/health
+Metrics: http://localhost:8000/metrics
+
+Press Ctrl+C to stop
+
+================================================
+
+================================================
+Server encountered an error: The term 'uvicorn' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+================================================
+Check logs\main_server.log for details
+
+================================================
+Main server stopped
+================================================
