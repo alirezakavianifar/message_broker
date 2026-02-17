@@ -87,6 +87,9 @@ class ProxyConfig:
         self.rate_limit_requests = 100
         self.rate_limit_window = 60  # seconds
 
+        # Exceptions (clients without certificates)
+        self.exceptions = config.get("exceptions", [])
+
 # Global configuration instance
 config = ProxyConfig()
 
@@ -451,6 +454,40 @@ def validate_client_certificate(cert_info: Optional[dict]) -> tuple[bool, str]:
     logger.debug(f"Certificate validated for client: {client_id}")
     return True, client_id
 
+
+def validate_exception_client(request: Request) -> tuple[bool, str]:
+    """
+    Validate client based on API key and/or IP whitelist exceptions
+    
+    Args:
+        request: FastAPI request object
+        
+    Returns:
+        Tuple of (is_valid, client_id)
+    """
+    if not config.exceptions:
+        return False, ""
+    
+    api_key = request.headers.get("X-API-Key")
+    client_ip = request.client.host if request.client else None
+    
+    if not api_key:
+        return False, ""
+    
+    for exception in config.exceptions:
+        if exception.get("api_key") == api_key:
+            # If IP whitelist is specified, check it
+            allowed_ips = exception.get("allowed_ips", [])
+            if allowed_ips and client_ip not in allowed_ips:
+                logger.warning(f"API key valid but IP {client_ip} not in whitelist for client {exception.get('client_id')}")
+                continue
+            
+            client_id = exception.get("client_id", "exception_client")
+            logger.info(f"Authenticated client {client_id} via API key (no certificate)")
+            return True, client_id
+            
+    return False, ""
+
 # ============================================================================
 # API Endpoints
 # ============================================================================
@@ -478,6 +515,10 @@ async def submit_message(
         # Extract and validate client certificate
         cert_info = extract_client_certificate(request)
         is_valid, client_id = validate_client_certificate(cert_info)
+        
+        # If certificate validation fails, try exception-based validation (API key)
+        if not is_valid:
+            is_valid, client_id = validate_exception_client(request)
         
         if not is_valid:
             requests_total.labels(

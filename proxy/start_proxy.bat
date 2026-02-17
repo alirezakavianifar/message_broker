@@ -101,6 +101,7 @@ if /i "%MODE%"=="--dev" (
     echo     --ssl-keyfile certs/proxy.key ^
     echo     --ssl-certfile certs/proxy.crt ^
     echo     --ssl-ca-certs certs/ca.crt ^
+    echo     --ssl-cert-reqs 1 ^
     echo     --workers 4
     echo.
     set /p START_TLS="Start with TLS? (yes/no, default: no): "
@@ -112,6 +113,7 @@ if /i "%MODE%"=="--dev" (
             --ssl-keyfile certs/proxy.key ^
             --ssl-certfile certs/proxy.crt ^
             --ssl-ca-certs certs/ca.crt ^
+            --ssl-cert-reqs 1 ^
             --workers 4 ^
             --log-level info
     ) else (

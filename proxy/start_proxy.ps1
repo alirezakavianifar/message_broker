@@ -27,7 +27,8 @@ if (-not $env:VIRTUAL_ENV) {
     $venvPath = "..\venv\Scripts\Activate.ps1"
     if (Test-Path $venvPath) {
         & $venvPath
-    } else {
+    }
+    else {
         Write-Host "[WARNING] Virtual environment not found" -ForegroundColor Yellow
         Write-Host "[INFO] Using system Python" -ForegroundColor Yellow
     }
@@ -121,7 +122,8 @@ $uvicornArgs = @(
 if ($Dev) {
     Write-Host "Starting in DEVELOPMENT mode (hot-reload enabled)..." -ForegroundColor Green
     $uvicornArgs += "--reload"
-} else {
+}
+else {
     Write-Host "Starting in PRODUCTION mode..." -ForegroundColor Green
     $uvicornArgs += "--workers", $Workers
 }
@@ -131,10 +133,12 @@ if (-not $NoTLS -and $certsExist) {
     $uvicornArgs += @(
         "--ssl-keyfile", "certs/proxy.key",
         "--ssl-certfile", "certs/proxy.crt",
-        "--ssl-ca-certs", "certs/ca.crt"
+        "--ssl-ca-certs", "certs/ca.crt",
+        "--ssl-cert-reqs", "1"
     )
     Write-Host "Server will be available at: https://localhost:$Port" -ForegroundColor White
-} else {
+}
+else {
     Write-Host "TLS: DISABLED (development only)" -ForegroundColor Yellow
     Write-Host "Server will be available at: http://localhost:$Port" -ForegroundColor White
 }

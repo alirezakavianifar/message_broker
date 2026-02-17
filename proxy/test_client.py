@@ -40,7 +40,9 @@ def send_message(
     sender: str,
     message: str,
     cert: Optional[tuple] = None,
-    verify: Optional[str] = None
+    verify: Optional[str] = None,
+    api_key: Optional[str] = None,
+    insecure: bool = False
 ) -> dict:
     """
     Send a test message to the proxy
@@ -51,6 +53,8 @@ def send_message(
         message: Message content
         cert: Tuple of (cert_file, key_file) for client certificate
         verify: Path to CA certificate for verification
+        api_key: Optional API key for authentication
+        insecure: If True, skip SSL verification
         
     Returns:
         Response dictionary
@@ -73,17 +77,24 @@ def send_message(
     print(f"URL:          {endpoint}")
     print(f"Sender:       {sender}")
     print(f"Message:      {message[:50]}...")
-    print(f"Client Cert:  {cert[0] if cert else 'None (no TLS)'}")
+    print(f"Client Cert:  {cert[0] if cert else 'None'}")
+    print(f"API Key:      {api_key if api_key else 'None'}")
     print(f"CA Cert:      {verify if verify else 'None'}")
     print(f"{'='*70}\n")
     
+    # Prepare headers
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["X-API-Key"] = api_key
+    
     try:
         # Create client with optional TLS config
-        with httpx.Client(cert=cert, verify=verify or False, timeout=30.0) as client:
+        verify_opt = False if insecure else (verify or True)
+        with httpx.Client(cert=cert, verify=verify_opt, timeout=30.0) as client:
             response = client.post(
                 endpoint,
                 json=msg.dict(),
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
             
             print(f"✓ Response Status: {response.status_code}")
@@ -145,13 +156,14 @@ def send_message(
         return {"error": str(e)}
 
 
-def test_health_check(url: str, verify: Optional[str] = None) -> bool:
+def test_health_check(url: str, verify: Optional[str] = None, insecure: bool = False) -> bool:
     """
     Test the health check endpoint
     
     Args:
         url: Proxy server URL
         verify: Path to CA certificate
+        insecure: If True, skip SSL verification
         
     Returns:
         True if healthy, False otherwise
@@ -165,7 +177,8 @@ def test_health_check(url: str, verify: Optional[str] = None) -> bool:
     print(f"{'='*70}\n")
     
     try:
-        with httpx.Client(verify=verify or False, timeout=10.0) as client:
+        verify_opt = False if insecure else (verify or True)
+        with httpx.Client(verify=verify_opt, timeout=10.0) as client:
             response = client.get(endpoint)
             
             if response.status_code == 200:
@@ -320,6 +333,15 @@ def main():
         help="Path to CA certificate file"
     )
     parser.add_argument(
+        "--api-key",
+        help="API Key for authentication (if no client certificate)"
+    )
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Skip SSL certificate verification"
+    )
+    parser.add_argument(
         "--sender",
         default="+1234567890",
         help="Sender phone number (default: +1234567890)"
@@ -344,11 +366,11 @@ def main():
     
     # Run tests
     if args.test_suite:
-        run_test_suite(args.url, cert, args.ca)
+        run_test_suite(args.url, cert, args.ca) # Need to update run_test_suite too if needed, but I'll stick to single tests
     else:
         # Single message test
-        test_health_check(args.url, args.ca)
-        send_message(args.url, args.sender, args.message, cert, args.ca)
+        test_health_check(args.url, args.ca, args.insecure)
+        send_message(args.url, args.sender, args.message, cert, args.ca, args.api_key, args.insecure)
 
 
 if __name__ == "__main__":

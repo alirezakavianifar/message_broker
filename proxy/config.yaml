@@ -46,3 +46,12 @@ rate_limiting:
   max_requests: 100
   window_seconds: 60
 
+# Clients allowed to connect without a certificate (but still via TLS)
+exceptions:
+  - client_id: "legacy_system_01"
+    api_key: "test-api-key-123"
+    allowed_ips: ["127.0.0.1", "::1"]
+  - client_id: "iot_device_02"
+    api_key: "another-secure-key-456"
+    allowed_ips: [] # Empty means any IP allowed with valid API key
+
