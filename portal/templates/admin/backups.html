@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Backup Management - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <h1 class="mt-4">
+        <i class="bi bi-archive-fill"></i> Backup Management
+    </h1>
+    <p class="text-muted">Create and manage database and system backups</p>
+
+    {% if success %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill"></i> {{ success }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i> {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
+    <div class="row mt-4">
+        <!-- Trigger Backup -->
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 bg-primary text-white">
+                    <h6 class="m-0 font-weight-bold">Create New Backup</h6>
+                </div>
+                <div class="card-body">
+                    <p>Trigger a full system backup including:</p>
+                    <ul>
+                        <li>MySQL Database</li>
+                        <li>Encryption Secrets</li>
+                        <li>Configuration Files</li>
+                        <li>Certificates</li>
+                    </ul>
+                    <div class="alert alert-info small">
+                        <i class="bi bi-info-circle"></i> Backups are compressed and stored securely on the server.
+                    </div>
+                    <form action="/admin/db/backup" method="POST"
+                        onsubmit="return confirm('Start full system backup?');">
+                        <button type="submit" class="btn btn-primary w-100 py-3">
+                            <i class="bi bi-cloud-arrow-up-fill me-2"></i> Backup Now
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backups List -->
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Available Backups</h6>
+                </div>
+                <div class="card-body">
+                    {% if backups %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Filename</th>
+                                    <th>Size</th>
+                                    <th>Created At</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for backup in backups %}
+                                <tr>
+                                    <td><code class="text-primary">{{ backup.filename }}</code></td>
+                                    <td>{{ backup.size_mb }} MB</td>
+                                    <td>{{ backup.created_at | datetimeformat }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-secondary" disabled
+                                            title="Download coming soon">
+                                            <i class="bi bi-download"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-folder2-open text-muted" style="font-size: 3rem;"></i>
+                        <p class="mt-3 text-muted">No backups found in the backup directory.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

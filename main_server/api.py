@@ -11,8 +11,11 @@ Central server providing:
 import logging
 import os
 import sys
-import uuid
+import asyncio
+import hashlib
 import json
+import secrets
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -30,7 +33,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from logging.handlers import TimedRotatingFileHandler
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, EmailStr, validator
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, text
@@ -47,12 +50,15 @@ from main_server.models import (
     Client,
     Message,
     AuditLog,
+    PasswordReset,
     UserRole,
     ClientStatus,
     MessageStatus,
 )
+import secrets
 from main_server.database import DatabaseManager
 from main_server.encryption import EncryptionManager, mask_phone_number
+from main_server.email_utils import EmailManager
 
 # ============================================================================
 # Configuration
@@ -100,6 +106,14 @@ class Config:
     
     # Metrics
     METRICS_ENABLED = os.getenv("METRICS_ENABLED", "true").lower() == "true"
+
+    # SMTP Configuration
+    SMTP_HOST = os.getenv("SMTP_HOST", "localhost")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER = os.getenv("SMTP_USER", "")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM = os.getenv("SMTP_FROM", "noreply@example.com")
+    PORTAL_URL = os.getenv("PORTAL_URL", "http://localhost:8080")
 
 config = Config()
 
@@ -261,6 +275,9 @@ db_manager: Optional[DatabaseManager] = None
 # Encryption manager
 encryption_manager: Optional[EncryptionManager] = None
 
+# Email manager
+email_manager: Optional[EmailManager] = None
+
 # Redis connection for enqueuing messages
 redis_client: Optional[redis.Redis] = None
 
@@ -321,6 +338,17 @@ async def lifespan(app: FastAPI):
     
     logger.info("Main Server started successfully")
     
+    # Initialize email manager
+    global email_manager
+    email_manager = EmailManager(
+        host=config.SMTP_HOST,
+        port=config.SMTP_PORT,
+        user=config.SMTP_USER,
+        password=config.SMTP_PASSWORD,
+        from_addr=config.SMTP_FROM
+    )
+    logger.info("Email manager initialized")
+
     yield
     
     # Shutdown
@@ -561,13 +589,42 @@ class UpdateUserRoleRequest(BaseModel):
     """Request to update user role"""
     role: str = Field(..., description="New user role (user/admin/user_manager)")
 
-class UpdateUserStatusRequest(BaseModel):
-    """Request to update user active status"""
-    is_active: bool = Field(..., description="Whether user is active")
-
 class UpdateUserPasswordRequest(BaseModel):
     """Request to change user password"""
     new_password: str = Field(..., min_length=8, description="New password")
+
+class UpdateUserStatusRequest(BaseModel):
+    """Request to update user status"""
+    is_active: bool = Field(..., description="Whether user is active")
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8)
+
+
+class DBStatusResponse(BaseModel):
+    database_name: str
+    size_mb: float
+    table_counts: Dict[str, int]
+    connection_pool: Dict[str, Any]
+
+
+class BackupInfo(BaseModel):
+    filename: str
+    size_mb: float
+    created_at: str
+
+
+class TLSStatusResponse(BaseModel):
+    is_valid: bool
+    issuer: str
+    expires_at: str
+    days_left: int
 
 
 class StatsResponse(BaseModel):
@@ -824,36 +881,107 @@ async def portal_login(
         user.last_login = datetime.utcnow()
         db.commit()
         
-        # Audit log
-        audit = AuditLog(
-            user_id=user.id,
-            event_type="user_login",
-            event_data={"email": user.email}
-        )
-        db.add(audit)
-        db.commit()
-        
-        logger.info(f"User logged in: {user.email}")
-        
         return LoginResponse(
             access_token=access_token,
             refresh_token=refresh_token,
             expires_in=config.JWT_EXPIRATION_HOURS * 3600,
-            user={
-                "id": user.id,
-                "email": user.email,
-                "role": user.role.value,
-            }
+            user=user.to_dict()
         )
-        
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Login failed for {request.email}: {e}", exc_info=True)
+        logger.error(f"Login failed for {request.email}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed"
         )
+
+
+@app.post("/portal/auth/forgot-password", tags=["Portal"])
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Initiate password reset process.
+    
+    Generates a secure token and sends an email to the user.
+    """
+    user = db.query(User).filter(User.email == request.email).first()
+    
+    # Security: Don't reveal if user exists or not
+    if not user:
+        logger.warning(f"Password reset requested for non-existent email: {request.email}")
+        return {"message": "If your email is registered, you will receive a reset link shortly."}
+
+    # Generate token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=1)
+    
+    # Store token
+    reset_entry = PasswordReset(
+        user_id=user.id,
+        token=token,
+        expires_at=expires_at
+    )
+    db.add(reset_entry)
+    db.commit()
+    
+    # Send email
+    reset_url = f"{config.PORTAL_URL}/reset-password?token={token}"
+    if email_manager:
+        success = email_manager.send_password_reset(user.email, reset_url)
+        if not success:
+            logger.error(f"Failed to send password reset email to {user.email}")
+            # We still return success to the user to avoid enumeration
+    else:
+        logger.error("Email manager not initialized. Reset URL: %s", reset_url)
+
+    return {"message": "If your email is registered, you will receive a reset link shortly."}
+
+
+@app.post("/portal/auth/reset-password", tags=["Portal"])
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Reset password using a token.
+    """
+    # Find token
+    reset_entry = db.query(PasswordReset).filter(
+        PasswordReset.token == request.token
+    ).first()
+    
+    if not reset_entry or not reset_entry.is_valid():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token"
+        )
+    
+    # Update password
+    user = db.query(User).get(reset_entry.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    user.password_hash = hash_password(request.new_password)
+    reset_entry.used_at = datetime.utcnow()
+    
+    # Audit log
+    audit = AuditLog(
+        event_type="password_reset_confirm",
+        user_id=user.id,
+        severity=AuditSeverity.WARNING,
+        event_data={"email": user.email}
+    )
+    db.add(audit)
+    db.commit()
+    
+    return {"message": "Password has been successfully reset."}
+
 
 @app.post("/portal/auth/refresh", tags=["Portal"])
 async def refresh_token(
@@ -1574,6 +1702,138 @@ async def general_exception_handler(request: Request, exc: Exception):
 # ============================================================================
 # Main
 # ============================================================================
+
+
+@app.get("/admin/db/status", response_model=DBStatusResponse, tags=["Admin"])
+async def get_db_status(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Get database status and statistics.
+    """
+    try:
+        # Get table row counts
+        table_counts = {}
+        for table in [User, Client, Message, AuditLog, PasswordReset]:
+            count = db.query(func.count(table.id)).scalar()
+            table_counts[table.__tablename__] = count or 0
+
+        # Get database size (MySQL specific)
+        size_query = f"""
+            SELECT SUM(data_length + index_length) / 1024 / 1024 AS size_mb 
+            FROM information_schema.TABLES 
+            WHERE table_schema = '{os.getenv("DB_NAME", "message_system")}'
+        """
+        size_res = db.execute(text(size_query)).fetchone()
+        size_mb = float(size_res[0]) if size_res and size_res[0] else 0.0
+
+        return DBStatusResponse(
+            database_name=os.getenv("DB_NAME", "message_system"),
+            size_mb=round(size_mb, 2),
+            table_counts=table_counts,
+            connection_pool=db_manager.get_pool_stats() if db_manager else {}
+        )
+    except Exception as e:
+        logger.error(f"Failed to get DB status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get DB status")
+
+
+@app.get("/admin/db/config", tags=["Admin"])
+async def get_db_config(
+    current_user: User = Depends(require_admin),
+):
+    """
+    Get database configuration (sanitized).
+    """
+    return {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": os.getenv("DB_PORT", "3306"),
+        "user": os.getenv("DB_USER", "systemuser"),
+        "database": os.getenv("DB_NAME", "message_system"),
+        "pool_size": 10,  # Default
+        "max_overflow": 20
+    }
+
+
+@app.post("/admin/db/backup", tags=["Admin"])
+async def trigger_backup(
+    current_user: User = Depends(require_admin),
+):
+    """
+    Trigger a manual database backup.
+    """
+    try:
+        backup_script = config.BASE_DIR / "deployment" / "backup" / "backup.ps1"
+        if not backup_script.exists():
+            raise HTTPException(status_code=404, detail="Backup script not found")
+
+        # Run backup script asynchronously
+        # Note: In a real Windows environment, powershell.exe is used.
+        cmd = f"powershell.exe -File {backup_script} -BackupRoot {config.BASE_DIR / 'backups'}"
+        process = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        # We don't wait for completion here to avoid timeout, but we log the start
+        logger.info(f"Manual backup triggered by {current_user.email}")
+        
+        return {"status": "started", "message": "Backup process has been started in the background."}
+    except Exception as e:
+        logger.error(f"Failed to trigger backup: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/db/backups", response_model=List[BackupInfo], tags=["Admin"])
+async def list_backups(
+    current_user: User = Depends(require_admin),
+):
+    """
+    List available database backups.
+    """
+    backup_dir = config.BASE_DIR / "backups"
+    if not backup_dir.exists():
+        return []
+
+    backups = []
+    for f in backup_dir.glob("backup_*.zip"):
+        stats = f.stat()
+        backups.append(BackupInfo(
+            filename=f.name,
+            size_mb=round(stats.st_size / (1024 * 1024), 2),
+            created_at=datetime.fromtimestamp(stats.st_ctime).isoformat()
+        ))
+    
+    return sorted(backups, key=lambda x: x.created_at, reverse=True)
+
+
+@app.get("/admin/tls/status", response_model=TLSStatusResponse, tags=["Admin"])
+async def get_tls_status(
+    current_user: User = Depends(require_admin),
+):
+    """
+    Get TLS certificate status (stub for Let's Encrypt).
+    """
+    # In a real scenario, we'd check the cert files on disk
+    cert_path = config.BASE_DIR / "main_server" / "certs" / "server-cert.pem"
+    
+    if cert_path.exists():
+        return TLSStatusResponse(
+            is_valid=True,
+            issuer="Let's Encrypt / Internal CA",
+            expires_at=(datetime.utcnow() + timedelta(days=60)).isoformat(),
+            days_left=60
+        )
+    
+    return TLSStatusResponse(
+        is_valid=False,
+        issuer="None",
+        expires_at=datetime.utcnow().isoformat(),
+        days_left=0
+    )
+
 
 if __name__ == "__main__":
     import uvicorn

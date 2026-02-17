@@ -1,22 +1,22 @@
 Write-Host "Stopping Message Broker Services..." -ForegroundColor Yellow
 
 # Ports used by the system
-$ports = @(8000, 8001, 5000)
+$ports = @(8000, 8001, 8080, 5000)
 
 foreach ($port in $ports) {
     $connections = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
     if ($connections) {
         $pids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
-        foreach ($pid in $pids) {
+        foreach ($p_id in $pids) {
             try {
-                $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+                $proc = Get-Process -Id $p_id -ErrorAction SilentlyContinue
                 if ($proc) {
-                    Write-Host "Stopping process on port $port (PID: $pid, Name: $($proc.Name))..."
-                    Stop-Process -Id $pid -Force
+                    Write-Host "Stopping process on port $port (PID: $p_id, Name: $($proc.Name))..."
+                    Stop-Process -Id $p_id -Force
                 }
             }
             catch {
-                Write-Host "Could not stop process $pid: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "Could not stop process $p_id: $($_.Exception.Message)" -ForegroundColor Red
             }
         }
     }

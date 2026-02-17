@@ -470,3 +470,42 @@ def drop_all_tables(engine):
     """
     Base.metadata.drop_all(engine)
 
+
+class PasswordReset(Base):
+    """
+    Password reset token model.
+    
+    Stores tokens generated for password resets via email.
+    Tokens are single-use and expire after a set duration.
+    """
+    __tablename__ = "password_resets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    token = Column(String(255), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        server_default=func.current_timestamp()
+    )
+
+    # Relationships
+    user = relationship("User")
+
+    def __repr__(self) -> str:
+        return f"<PasswordReset(user_id={self.user_id}, used={self.used_at is not None})>"
+
+    def is_valid(self) -> bool:
+        """Check if reset token is still valid (not expired and not used)."""
+        if self.used_at:
+            return False
+        if self.expires_at < datetime.utcnow():
+            return False
+        return True

@@ -104,6 +104,32 @@ CREATE TABLE `messages` (
 COMMENT='Encrypted message storage with privacy protection';
 
 -- ============================================================================
+-- Table: password_resets
+-- Description: Password reset tokens for email-based recovery
+-- ============================================================================
+
+CREATE TABLE `password_resets` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `token` VARCHAR(255) NOT NULL,
+  `expires_at` DATETIME NOT NULL,
+  `used_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_token` (`token`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_expires_at` (`expires_at`),
+  
+  CONSTRAINT `fk_reset_user` 
+    FOREIGN KEY (`user_id`) 
+    REFERENCES `users` (`id`)
+    ON DELETE CASCADE 
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='Password reset tokens with expiration and single-use tracking';
+
+-- ============================================================================
 -- Table: audit_log
 -- Description: Audit trail for security-sensitive operations
 -- ============================================================================

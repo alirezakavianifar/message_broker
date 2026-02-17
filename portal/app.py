@@ -17,6 +17,7 @@ from fastapi import (
     FastAPI,
     Request,
     Form,
+    Query,
     Depends,
     HTTPException,
     status,
@@ -403,6 +404,70 @@ class MainServerClient:
             response.raise_for_status()
             return response.json()
 
+    async def forgot_password(self, email: str) -> dict:
+        """Initiate password reset"""
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/portal/auth/forgot-password",
+                json={"email": email}
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def reset_password(self, token: str, new_password: str) -> dict:
+        """Reset password using token"""
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/portal/auth/reset-password",
+                json={"token": token, "new_password": new_password}
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_db_status(self, access_token: str) -> dict:
+        """Get database status (admin only)"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.get(
+                f"{self.base_url}/admin/db/status",
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def trigger_backup(self, access_token: str) -> dict:
+        """Trigger manual backup (admin only)"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/admin/db/backup",
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_backups(self, access_token: str) -> list:
+        """List available backups (admin only)"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.get(
+                f"{self.base_url}/admin/db/backups",
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_tls_status(self, access_token: str) -> dict:
+        """Get TLS status (admin only)"""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with httpx.AsyncClient(verify=self.verify_ssl, timeout=self.timeout) as client:
+            response = await client.get(
+                f"{self.base_url}/admin/tls/status",
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+
 # Global API client
 api_client = MainServerClient()
 
@@ -525,10 +590,94 @@ async def login(
 @app.get("/logout")
 async def logout(request: Request):
     """Logout"""
-    user_email = request.session.get("user", {}).get("email", "unknown")
     request.session.clear()
-    logger.info(f"User logged out: {user_email}")
-    return RedirectResponse(url="/", status_code=302)
+    return RedirectResponse(url="/login", status_code=302)
+
+
+@app.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(request: Request):
+    """Forgot password page"""
+    return templates.TemplateResponse(
+        "auth/forgot_password.html",
+        {"request": request}
+    )
+
+
+@app.post("/forgot-password")
+async def process_forgot_password(
+    request: Request,
+    email: str = Form(...),
+):
+    """Process forgot password request"""
+    try:
+        await api_client.forgot_password(email)
+        return templates.TemplateResponse(
+            "auth/forgot_password.html",
+            {
+                "request": request,
+                "success": "If your email is registered, you will receive a reset link shortly."
+            }
+        )
+    except Exception as e:
+        logger.error(f"Forgot password error: {e}")
+        return templates.TemplateResponse(
+            "auth/forgot_password.html",
+            {
+                "request": request,
+                "error": "An error occurred. Please try again later."
+            }
+        )
+
+
+@app.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_page(
+    request: Request,
+    token: str = Query(...)
+):
+    """Reset password page"""
+    return templates.TemplateResponse(
+        "auth/reset_password.html",
+        {"request": request, "token": token}
+    )
+
+
+@app.post("/reset-password")
+async def process_reset_password(
+    request: Request,
+    token: str = Form(...),
+    password: str = Form(...)
+):
+    """Process password reset"""
+    try:
+        await api_client.reset_password(token, password)
+        return templates.TemplateResponse(
+            "auth/reset_password.html",
+            {
+                "request": request,
+                "success": "Your password has been successfully reset. You can now login.",
+                "token": token
+            }
+        )
+    except httpx.HTTPStatusError as e:
+        logger.warning(f"Reset password failed: {e}")
+        return templates.TemplateResponse(
+            "auth/reset_password.html",
+            {
+                "request": request,
+                "error": "Invalid or expired reset token.",
+                "token": token
+            }
+        )
+    except Exception as e:
+        logger.error(f"Reset password error: {e}")
+        return templates.TemplateResponse(
+            "auth/reset_password.html",
+            {
+                "request": request,
+                "error": "An error occurred. Please try again later.",
+                "token": token
+            }
+        )
 
 # ============================================================================
 # Routes - User Dashboard
@@ -796,6 +945,69 @@ async def admin_messages(
         logger.error(f"Admin messages error: {e}")
         request.session["error"] = "Failed to load messages"
         return RedirectResponse(url="/admin/dashboard", status_code=302)
+
+@app.get("/admin/database", response_class=HTMLResponse)
+async def admin_database(request: Request, user: dict = Depends(require_admin)):
+    """Database and system status page"""
+    try:
+        access_token = request.session.get("access_token")
+        db_status = await api_client.get_db_status(access_token)
+        tls_status = await api_client.get_tls_status(access_token)
+        
+        return templates.TemplateResponse(
+            "admin/database.html",
+            {
+                "request": request,
+                "user": user,
+                "db_status": db_status,
+                "tls_status": tls_status
+            }
+        )
+    except Exception as e:
+        logger.error(f"Database status error: {e}")
+        request.session["error"] = "Failed to load database status"
+        return RedirectResponse(url="/admin/dashboard", status_code=302)
+
+
+@app.get("/admin/backups", response_class=HTMLResponse)
+async def admin_backups(request: Request, user: dict = Depends(require_admin)):
+    """Backup management page"""
+    try:
+        access_token = request.session.get("access_token")
+        backups = await api_client.get_backups(access_token)
+        
+        success = request.session.pop("success", None)
+        error = request.session.pop("error", None)
+        
+        return templates.TemplateResponse(
+            "admin/backups.html",
+            {
+                "request": request,
+                "user": user,
+                "backups": backups,
+                "success": success,
+                "error": error
+            }
+        )
+    except Exception as e:
+        logger.error(f"Backups list error: {e}")
+        request.session["error"] = "Failed to load backups"
+        return RedirectResponse(url="/admin/dashboard", status_code=302)
+
+
+@app.post("/admin/db/backup")
+async def admin_trigger_backup(request: Request, user: dict = Depends(require_admin)):
+    """Trigger manual backup"""
+    try:
+        access_token = request.session.get("access_token")
+        await api_client.trigger_backup(access_token)
+        
+        request.session["success"] = "Backup process started in background."
+        return RedirectResponse(url="/admin/backups", status_code=302)
+    except Exception as e:
+        logger.error(f"Trigger backup error: {e}")
+        request.session["error"] = f"Failed to start backup: {str(e)}"
+        return RedirectResponse(url="/admin/backups", status_code=302)
 
 # ============================================================================
 # Routes - Admin User Status & Password
