@@ -1,0 +1,112 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: mb_db
+    environment:
+      MYSQL_DATABASE: message_system
+      MYSQL_USER: systemuser
+      MYSQL_PASSWORD: StrongPass123!
+      MYSQL_ROOT_PASSWORD: RootPass123!
+    ports:
+      - "3306:3306"
+    volumes:
+      - mb_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.0
+    container_name: mb_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  main_server:
+    build:
+      context: .
+      dockerfile: main_server/Dockerfile
+    container_name: mb_main_server
+    environment:
+      - DATABASE_URL=mysql+pymysql://systemuser:StrongPass123!@db/message_system
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=SuperSecretJWTKey_ChangeInProduction
+      - ENCRYPTION_KEY_PATH=/app/main_server/secrets/encryption.key
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./main_server/certs:/app/main_server/certs
+      - ./main_server/logs:/app/main_server/logs
+      - ./main_server/secrets:/app/main_server/secrets
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  proxy:
+    build:
+      context: .
+      dockerfile: proxy/Dockerfile
+    container_name: mb_proxy
+    environment:
+      - MAIN_SERVER_URL=http://main_server:8000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MAIN_SERVER_VERIFY_SSL=false
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./proxy/certs:/app/proxy/certs
+      - ./proxy/logs:/app/proxy/logs
+    depends_on:
+      main_server:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  portal:
+    build:
+      context: .
+      dockerfile: portal/Dockerfile
+    container_name: mb_portal
+    environment:
+      - MAIN_SERVER_URL=http://main_server:8000
+      - MAIN_SERVER_VERIFY_SSL=false
+      - SESSION_SECRET=change_this_session_secret_in_docker
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./portal/logs:/app/portal/logs
+    depends_on:
+      main_server:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: mb_worker
+    environment:
+      - MAIN_SERVER_URL=http://main_server:8000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MAIN_SERVER_VERIFY_SSL=false
+    volumes:
+      - ./worker/certs:/app/worker/certs
+      - ./worker/logs:/app/worker/logs
+    depends_on:
+      main_server:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+volumes:
+  mb_db_data:
